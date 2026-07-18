@@ -25,7 +25,7 @@ OpenCode session. Zero lost state.
 
 `persist-dev` assumes a few things before you run the one-liner:
 
-- **A Linux server** (Debian/Ubuntu-class VPS, old PC, or seedbox) you can get a shell on once and that stays online. It needs `apt` + internet.
+- **A Linux server** (VPS, old PC, or seedbox) you can get a shell on once and that stays online. It runs a supported package manager (apt / dnf / yum / pacman / zypper / apk) + internet.
 - **Root on that server** — the setup script installs packages and joins Tailscale, so run it as root (e.g. `sudo ./setup.sh`).
 - **A (free) Tailscale account**, with Tailscale installed on the laptop/phone you'll connect from, all on the same tailnet.
 - **`mosh` on your client** (`brew install mosh` / `apt install mosh`) — that's what survives flaky networks.

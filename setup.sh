@@ -69,6 +69,18 @@ install_tailscale() {
   $SUDO sh "$ts_script"
   rm -f "$ts_script"
 }
+# mosh-server runs INSIDE the container (the mosh *client* is on the
+# user's laptop). Verify it's present and install into the container if missing.
+ensure_mosh() {
+  if podman exec "$CONTAINER" command -v mosh-server >/dev/null 2>&1; then
+    echo "  mosh-server present in container."
+    return 0
+  fi
+  echo "  mosh-server missing in container; installing (apt)..."
+  podman exec "$CONTAINER" bash -c \
+    "apt-get update -y >/dev/null 2>&1; apt-get install -y mosh" \
+    || echo "  [warn] could not auto-install mosh-server. Install 'mosh' in the container manually; mosh connections will fail without it."
+}
 
 pull_or_build() {
   if podman pull "$IMAGE" 2>/dev/null; then
@@ -106,6 +118,7 @@ run_container() {
       "$IMAGE"
     echo "== started container =="
   fi
+  ensure_mosh
 }
 
 secure_server() {
