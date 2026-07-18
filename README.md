@@ -151,6 +151,20 @@ OpenCode doesn't notice. Open a new viewport and you're exactly where you left o
 MIT
 
 ## Roadmap / not-yet-done
-- GitHub Actions build of `ghcr.io/imb0l/persist-dev` (needs a PAT with `workflow` scope).
-- Auto-restart a crashed harness inside its session (e.g. `while true; do $HARNESS; done`).
-- `dev backup` of the harness config dirs is included in the `/workspace` rsync.
+
+See **`HANDOFF.md`** for the full continuation brief (architecture, current state, gaps, and the
+exact tasks below) — it's written so another agent can clone the repo and pick up where this
+left off.
+
+- **T1** — Publish prebuilt image via GitHub Actions → `ghcr.io/imb0l/persist-dev` (blocked: the
+  GitHub PAT lacks the `workflow` scope; use a fine-grained token, then commit `.github/workflows/build.yml`).
+- **T2** — Auto-restart a crashed harness inside its session (`while true` loop / `tmux respawn-pane` / `dev watch`).
+- **T3** — Pin installer versions (opencode, omp) instead of floating `curl … | sh`.
+- **T4** — Security hardening: force-change the default `dev` password, document key-only + Tailscale-only access, optional podman resource limits.
+- **T5** — Richer `dev`: `doctor`, `rename`, auto-create on `attach`, `log`.
+- **T6** — Docs: per-harness auth + troubleshooting.
+- **T7** — Cron wrapper for `dev backup`.
+
+**Open question (must resolve before "done"):** requirement #1 from the original voice spec was
+cut off by STT ("important information needs to be ___"). Ask Imbol what it is — it may change a
+`dev` subcommand.
