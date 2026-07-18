@@ -132,7 +132,7 @@ wrapping `dev backup` is all you need for off-box durability.
   copy your SSH key in: `ssh-copy-id -p 2222 dev@<tailscale-ip>`.
 - Tailscale already encrypts and restricts access to devices you approve — keep it that way; don't
   also expose port 2222 to the public internet.
-The prebuilt image is published to `ghcr.io/LUCID-LABS-LTD/persist-dev`. To build from source yourself,
+The prebuilt image is published to `ghcr.io/lucid-labs-ltd/persist-dev`. To build from source yourself,
   `podman build -t persist-dev -f Containerfile .` (CI does this automatically on push).
 
 ## How it fits together
@@ -168,7 +168,7 @@ MIT
 See **`HANDOFF.md`** for the full continuation brief (architecture, current state, gaps, and the
 tasks below) — it's written so another agent can clone the repo and pick up where this left off.
 
-- **T1** — ✅ Prebuilt image published via GitHub Actions → `ghcr.io/LUCID-LABS-LTD/persist-dev` (`.github/workflows/build.yml`, builds on push to `main`).
+- **T1** — ✅ Prebuilt image published via GitHub Actions → `ghcr.io/lucid-labs-ltd/persist-dev` (`.github/workflows/build.yml`, builds on push to `main`).
 - **T2** — ✅ Auto-restart a crashed harness: `dev new`/`dev run` launch via `dev-harness`, which restarts the agent on crash (clean quit / Ctrl-C does not restart).
 - **T3** — ✅ Installer versions pinned (opencode `0.0.55`, omp `v17.0.4`, claude-code `2.1.214`, codex `0.144.5`).
 - **T4** — ✅ Security: `./setup.sh --secure` forces a new `dev` password and can switch to key-only SSH; port 2222 is Tailscale-only; optional podman `--memory`/`--cpus` via `PERSIST_MEM`/`PERSIST_CPUS`.
