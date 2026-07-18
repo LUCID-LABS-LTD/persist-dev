@@ -23,27 +23,46 @@ SECURE=false
 CRON=false
 CRON_REMOVE=false
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "this script needs '$1'"; exit 1; }; }
+# Run privileged commands via sudo only when not already root.
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
+
+# Detect the distro's package manager.
+detect_pkg() {
+  if command -v apt-get >/dev/null 2>&1; then PKG=apt
+  elif command -v dnf >/dev/null 2>&1; then PKG=dnf
+  elif command -v yum >/dev/null 2>&1; then PKG=yum
+  elif command -v pacman >/dev/null 2>&1; then PKG=pacman
+  elif command -v zypper >/dev/null 2>&1; then PKG=zypper
+  elif command -v apk >/dev/null 2>&1; then PKG=apk
+  else PKG=unknown; fi
+}
+
+# Install one or more packages with the detected manager.
+pkg_install() {
+  detect_pkg
+  case "$PKG" in
+    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || true; $SUDO apt-get install -y "$@" ;;
+    dnf)    $SUDO dnf install -y "$@" ;;
+    yum)    $SUDO yum install -y "$@" ;;
+    pacman) $SUDO pacman -S --noconfirm "$@" ;;
+    zypper) $SUDO zypper install -y "$@" ;;
+    apk)    $SUDO apk add --no-cache "$@" ;;
+    *) echo "Unsupported package manager — install manually: $*"; exit 1 ;;
+  esac
+}
 
 install_podman() {
   if command -v podman >/dev/null 2>&1; then return 0; fi
   echo "== installing podman =="
-  if command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get update && sudo apt-get install -y podman
-  elif command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y podman
-  elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --noconfirm podman
-  else
-    echo "Unsupported package manager. Install podman manually: https://podman.io/getting-started/installation"
-    exit 1
-  fi
+  command -v curl >/dev/null 2>&1 || pkg_install curl
+  pkg_install podman
 }
 
 install_tailscale() {
   if command -v tailscale >/dev/null 2>&1; then return 0; fi
   echo "== installing tailscale =="
-  curl -fsSL https://tailscale.com/install.sh | sh
+  command -v curl >/dev/null 2>&1 || pkg_install curl
+  curl -fsSL https://tailscale.com/install.sh | $SUDO sh
 }
 
 pull_or_build() {
@@ -121,10 +140,13 @@ remove_cron() {
 
 usage() {
   cat <<'EOF'
-Usage: ./setup.sh [--secure] [--cron] [--cron-remove]
+Usage: sudo ./setup.sh [--secure] [--cron] [--cron-remove]
   --secure        force a new 'dev' password and optionally go key-only
   --cron          schedule `dev backup` every 6h (needs BACKUP_TARGET set)
   --cron-remove   remove the scheduled backup cron entry
+Env (all optional):
+  TS_AUTHKEY      tailscale auth key (headless servers) — joins the tailnet without a browser
+  PORT_SSH, DATA_DIR, BACKUP_TARGET, PERSIST_MEM, PERSIST_CPUS  (see header)
 EOF
 }
 
@@ -138,11 +160,16 @@ main() {
       *) echo "unknown flag: $1"; usage; exit 1 ;;
     esac
   done
-  need curl
+  command -v curl >/dev/null 2>&1 || { detect_pkg; pkg_install curl; }
   install_podman
   install_tailscale
-  # Bring the server onto your tailnet (opens a browser / shows a login URL).
-  sudo tailscale up
+  # Bring the server onto your tailnet. On a headless box, set TS_AUTHKEY to a
+  # tailscale.com auth key; otherwise it prints a login URL to open in a browser.
+  if [ -n "${TS_AUTHKEY:-}" ]; then
+    $SUDO tailscale up --auth-key "$TS_AUTHKEY"
+  else
+    $SUDO tailscale up
+  fi
   pull_or_build
   run_container
 

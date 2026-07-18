@@ -21,18 +21,32 @@ session dies the moment the network drops: your TUI freezes, the agent stops, an
 When your net drops, mosh freezes, the server keeps running, and you reconnect to the *exact* same
 OpenCode session. Zero lost state.
 
+## Prerequisites
+
+`persist-dev` assumes a few things before you run the one-liner:
+
+- **A Linux server** (Debian/Ubuntu-class VPS, old PC, or seedbox) you can get a shell on once and that stays online. It needs `apt` + internet.
+- **Root on that server** — the setup script installs packages and joins Tailscale, so run it as root (e.g. `sudo ./setup.sh`).
+- **A (free) Tailscale account**, with Tailscale installed on the laptop/phone you'll connect from, all on the same tailnet.
+- **`mosh` on your client** (`brew install mosh` / `apt install mosh`) — that's what survives flaky networks.
+- **Your own agent API keys** for whichever harness you'll use (OpenAI, Anthropic, Google, …). The harnesses are installed but unauthenticated; you log in inside the session.
+
 ## 5-minute setup
 
 On the always-on server:
 
 ```bash
 git clone https://github.com/LUCID-LABS-LTD/persist-dev && cd persist-dev
-./setup.sh
+sudo ./setup.sh
 ```
 
 `setup.sh` installs Podman + Tailscale if missing, pulls the prebuilt image, runs the container,
 and prints your connect command. (First-time package installs dominate the clock; the
 clone→run path is instant if Podman + Tailscale are already present.)
+
+**Headless server?** `tailscale up` normally opens a browser login. On a box with no browser,
+set `TS_AUTHKEY` to a key from *tailscale.com → Settings → Keys* and run
+`TS_AUTHKEY=tskey-xxxxx sudo ./setup.sh` — the script joins the tailnet for you, no browser needed.
 
 ## Connect from anywhere
 
@@ -45,6 +59,10 @@ mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev attach <name>
 ```
 
 From a phone: open the Tailscale app, then Blink/Termius → `mosh dev@<tailscale-ip> -- dev menu`.
+> **First run — change the default password.** The `dev` user ships with password `dev`. Before
+> anything else, either `ssh -p 2222 dev@<tailscale-ip>` → `passwd`, or copy your key with
+> `ssh-copy-id -p 2222 dev@<tailscale-ip>` and run `sudo ./setup.sh --secure` for key-only SSH.
+> See [Security notes](#security-notes).
 
 ## Harness-agnostic
 
