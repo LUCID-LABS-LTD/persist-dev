@@ -48,6 +48,32 @@ clone→run path is instant if Podman + Tailscale are already present.)
 set `TS_AUTHKEY` to a key from *tailscale.com → Settings → Keys* and run
 `TS_AUTHKEY=tskey-xxxxx sudo ./setup.sh` — the script joins the tailnet for you, no browser needed.
 
+## Client setup
+
+You only *connect to* the box — install these once on each device:
+
+**Laptop (macOS)**
+```bash
+brew install tailscale mosh      # Tailscale app + mosh client
+# open the Tailscale app and log into your tailnet
+```
+
+**Laptop (Linux)**
+```bash
+# Tailscale: https://tailscale.com/download/linux (or your distro's package)
+sudo apt install mosh          # mosh client (use dnf/yum/pacman/zypper/apk per distro)
+```
+
+**Laptop (Windows)**
+- Install **Tailscale** (tailscale.com/download) and **OpenSSH** (Settings → Apps → Optional features, or via WSL).
+- Connect through WSL, or a mosh-capable terminal.
+
+**Phone**
+- Install the **Tailscale** app and join the same tailnet.
+- Install a mosh-capable terminal: **Blink** (iOS) or **Termius** (iOS/Android).
+
+Then connect (next section).
+
 ## Connect from anywhere
 
 ```bash
