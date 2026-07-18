@@ -11,14 +11,21 @@ mkdir -p /var/run/sshd /workspace/projects /workspace/.config
 
 # Persist agent config/auth on the volume so credentials survive container recreation.
 # The container's home is ephemeral; symlink each tool's config dir into /workspace.
-for d in opencode claude codex gemini persist-dev; do
-  mkdir -p "/workspace/.config/$d"
-  rm -rf "/home/dev/.config/$d"
-  ln -sfn "/workspace/.config/$d" "/home/dev/.config/$d"
+for d in opencode claude codex gemini persist-dev omp; do
+  if [ "$d" = "omp" ]; then
+    # omp stores everything under ~/.omp (respects PI_CONFIG_DIR)
+    mkdir -p /workspace/.omp
+    rm -rf /home/dev/.omp
+    ln -sfn /workspace/.omp /home/dev/.omp
+  else
+    mkdir -p "/workspace/.config/$d"
+    rm -rf "/home/dev/.config/$d"
+    ln -sfn "/workspace/.config/$d" "/home/dev/.config/$d"
+  fi
 done
 mkdir -p /workspace/.codex;  rm -rf /home/dev/.codex;  ln -sfn /workspace/.codex  /home/dev/.codex
 mkdir -p /workspace/.gemini; rm -rf /home/dev/.gemini; ln -sfn /workspace/.gemini /home/dev/.gemini
-chown -R dev:dev /workspace/.config /workspace/.codex /workspace/.gemini 2>/dev/null || true
+chown -R dev:dev /workspace/.config /workspace/.codex /workspace/.gemini /workspace/.omp 2>/dev/null || true
 
 # Start sshd.
 /usr/sbin/sshd

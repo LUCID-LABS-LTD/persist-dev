@@ -22,6 +22,9 @@ ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 # OpenCode CLI (https://opencode.ai).
 RUN curl -fsSL https://opencode.ai/install | bash || echo "opencode install skipped; install manually inside the container"
 
+# Oh My Pi (omp) — https://omp.sh
+RUN curl -fsSL https://omp.sh/install | sh || echo "omp install skipped; install manually inside the container"
+
 # Claude Code + OpenAI Codex (best-effort; build still succeeds if offline).
 RUN npm install -g @anthropic-ai/claude-code @openai/codex 2>/dev/null \
     || echo "claude/codex npm install skipped (offline or unsupported); install inside the container if needed"

@@ -24,6 +24,7 @@ opencode=opencode
 claude=claude
 codex=codex
 agy=agy -i
+omp=omp
 
 # add your own, e.g.:
 # ollama=ollama run qwen2.5-coder

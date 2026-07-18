@@ -57,6 +57,7 @@ resumable tmux session. The four you mentioned come preconfigured:
 | `codex` | `codex` | OpenAI Codex |
 | `claude` | `claude` | Claude Code |
 | `opencode` | `opencode` | default; add more via `dev harness add` |
+| `omp` | `omp` | Oh My Pi (https://omp.sh) — terminal coding agent |
 
 List or extend them:
 
@@ -90,13 +91,15 @@ dev new cli https://github.com/you/cli            # defaults to opencode
 dev menu            # pick one, work, detach (Ctrl-b d), pick the other later
 ```
 
-Each harness's own config and auth (OpenCode, Claude, Codex, Gemini/agy tokens) is symlinked
-onto the persistent volume (`/workspace/.config`, `/workspace/.codex`, `/workspace/.gemini`),
-so **credentials and sessions survive a container rebuild** — you re-pull the image and your
-logins are still there.
+Each harness's own config and auth (OpenCode, Claude, Codex, Gemini/agy, and Oh My Pi/omp
+tokens) is symlinked onto the persistent volume (`/workspace/.config`, `/workspace/.codex`,
+`/workspace/.gemini`, `/workspace/.omp`), so **credentials and sessions survive a container
+rebuild** — you re-pull the image and your logins are still there.
 
 > Caveat: `agy`'s auth can live in a desktop keyring rather than a plain file, so if it prompts
 > after a rebuild, re-auth once. Codex/Claude/OpenCode file-based config mounts transparently.
+> `omp` stores provider keys in `~/.omp/.env` / `~/.omp/agent/.env` (or env vars like
+> `GEMINI_API_KEY`); all of that lives under the symlinked `~/.omp`, so it persists too.
 
 ## Backup
 
