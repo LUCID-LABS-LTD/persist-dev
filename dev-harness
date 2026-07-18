@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# dev-harness: launch a coding-agent harness inside a tmux pane with
+# auto-restart on CRASH. Run by `dev new` / `dev run`.
+#
+# Restart policy:
+#   - clean quit (exit 0)        -> do NOT restart
+#   - SIGINT / SIGTERM (130/143) -> user meant to quit -> do NOT restart
+#   - any other exit (crash)     -> restart after a short delay
+#
+# To bounce the restart loop without killing the agent, touch the stop flag:
+#   touch /workspace/projects/.persist/<name>.norestart
+set -u
+name="${1:?usage: dev-harness <name> <harness cmd...>}"
+shift
+cmd=("$@")
+flag="/workspace/projects/.persist/$name.norestart"
+while true; do
+  if [ -f "$flag" ]; then
+    rm -f "$flag"
+    "${cmd[@]}"
+    break
+  fi
+  "${cmd[@]}"
+  code=$?
+  if [ "$code" -eq 0 ] || [ "$code" -eq 130 ] || [ "$code" -eq 143 ]; then
+    echo "[persist-dev] harness exited ($code); not restarting."
+    break
+  fi
+  echo "[persist-dev] harness crashed (code $code); restarting in 3s (touch $flag to stop)..."
+  sleep 3
+done
