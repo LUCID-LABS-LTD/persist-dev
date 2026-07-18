@@ -1,0 +1,19 @@
+# persist-dev sshd config — quick-start friendly, harden before production.
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+X11Forwarding no
+AllowTcpForwarding yes
+PermitTTY yes
+PrintMotd no
+
+Subsystem sftp internal-sftp
+
+ClientAliveInterval 60
+ClientAliveCountMax 3

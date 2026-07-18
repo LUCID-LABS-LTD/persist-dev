@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# persist-dev project switcher — runs INSIDE the container as the 'dev' user.
+set -euo pipefail
+
+PROJECTS_DIR="${PROJECTS_DIR:-/workspace/projects}"
+TMUX_PREFIX="proj-"
+
+cmd_ls() {
+  mkdir -p "$PROJECTS_DIR"
+  local sessions
+  sessions=$(tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}" | sed "s/^${TMUX_PREFIX}//;s/:.*//" || true)
+  if [ -z "$sessions" ]; then
+    echo "No active projects. Start one with: dev new <name> [git-url]"
+    return 0
+  fi
+  echo "Active projects:"
+  for s in $sessions; do
+    local attached
+    if tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}${s}:" | grep -qo '(attached)'; then
+      attached="attached"
+    else
+      attached="detached"
+    fi
+    local dir="$PROJECTS_DIR/$s"
+    printf "  %-20s %-9s %s\n" "$s" "$attached" "[$dir]"
+  done
+}
+
+cmd_new() {
+  local name="${1:?usage: dev new <name> [git-url]}"
+  shift || true
+  local git_url="${1:-}"
+  mkdir -p "$PROJECTS_DIR"
+  local dir="$PROJECTS_DIR/$name"
+  if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
+    echo "Project $name already exists at $dir"
+    exit 1
+  fi
+  mkdir -p "$dir"
+  if [ -n "$git_url" ]; then
+    if git clone "$git_url" "$dir"; then
+      echo "Cloned $git_url -> $dir"
+    else
+      echo "Clone failed; empty project created at $dir"
+    fi
+  fi
+  local sess="${TMUX_PREFIX}${name}"
+  if tmux has-session -t "$sess" 2>/dev/null; then
+    echo "Session $sess already running"
+    exec tmux attach -t "$sess"
+  fi
+  tmux new-session -d -s "$sess" -c "$dir"
+  tmux send-keys -t "$sess" 'opencode' C-m
+  echo "Created project $name -> $dir  (session $sess)"
+  echo "Attach with: dev attach $name"
+}
+
+cmd_attach() {
+  local name="${1:?usage: dev attach <name>}"
+  local sess="${TMUX_PREFIX}${name}"
+  if ! tmux has-session -t "$sess" 2>/dev/null; then
+    echo "No session for '$name'. Create it with: dev new $name"
+    exit 1
+  fi
+  exec tmux attach -t "$sess"
+}
+
+cmd_stop() {
+  local name="${1:?usage: dev stop <name>}"
+  local sess="${TMUX_PREFIX}${name}"
+  if tmux kill-session -t "$sess" 2>/dev/null; then
+    echo "Stopped $name"
+  else
+    echo "Nothing to stop for $name"
+  fi
+}
+
+cmd_rm() {
+  local name="${1:?usage: dev rm <name>}"
+  local sess="${TMUX_PREFIX}${name}"
+  tmux kill-session -t "$sess" 2>/dev/null || true
+  local dir="$PROJECTS_DIR/$name"
+  read -r -p "Delete project files at $dir ? [y/N] " ans
+  if [[ "$ans" =~ ^[Yy]$ ]]; then
+    rm -rf "$dir" && echo "Removed $name"
+  else
+    echo "Kept files."
+  fi
+}
+
+cmd_backup() {
+  local target="${BACKUP_TARGET:-}"
+  if [ -z "$target" ]; then
+    echo "Set BACKUP_TARGET (e.g. user@host:/path or an rclone remote) to enable backup."
+    echo "Example: export BACKUP_TARGET='myserver:/backups/persist' && dev backup"
+    exit 1
+  fi
+  echo "Backing up $PROJECTS_DIR -> $target"
+  mkdir -p "$PROJECTS_DIR"
+  rsync -az --delete "$PROJECTS_DIR/" "$target/"
+  echo "Backup done."
+}
+
+cmd_ls_raw() {
+  tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}" | sed "s/^${TMUX_PREFIX}//;s/:.*//" || true
+}
+
+cmd_menu() {
+  local choice
+  choice=$(cmd_ls_raw | fzf --prompt="project> " || true)
+  if [ -n "$choice" ]; then
+    exec tmux attach -t "${TMUX_PREFIX}${choice}"
+  fi
+  echo "(no project selected)"
+}
+
+main() {
+  local cmd="${1:-menu}"; shift || true
+  case "$cmd" in
+    ls|list)   cmd_ls "$@" ;;
+    new)       cmd_new "$@" ;;
+    attach|a)  cmd_attach "$@" ;;
+    stop|kill) cmd_stop "$@" ;;
+    rm|remove) cmd_rm "$@" ;;
+    backup)    cmd_backup "$@" ;;
+    menu|"")   cmd_menu "$@" ;;
+    *)         echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|stop|rm|backup|menu>"; exit 1 ;;
+  esac
+}
+main "$@"

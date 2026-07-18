@@ -1,0 +1,116 @@
+# persist-dev
+
+> Resumable, multi-project dev box you can reach from anywhere — survives power cuts and ISP drops.
+
+`persist-dev` is a one-command setup for a persistent coding environment that lives on an
+always-on server (your own hardware, a VPS, or a seedbox). You reach it over **mosh + Tailscale**,
+work inside **tmux** sessions, and use **OpenCode** (or any TUI agent) without ever losing state
+when the lights go out or the ISP blinks.
+
+## Why
+
+If you code through flaky power/internet (Nigeria, loadshedding, roaming cellular), a raw SSH
+session dies the moment the network drops: your TUI freezes, the agent stops, and you start over.
+`persist-dev` decouples the *work* from the *connection*:
+
+- **Podman** → reproducible environment, data on a persistent volume you can back up in one command.
+- **Tailscale** → stable private address + encrypted auth; laptop and phone reach the same box.
+- **mosh** → UDP-based; survives IP changes and intermittent connectivity without killing the session.
+- **tmux** → the session (and your agent) lives server-side, fully decoupled from the transport.
+
+When your net drops, mosh freezes, the server keeps running, and you reconnect to the *exact* same
+OpenCode session. Zero lost state.
+
+## 5-minute setup
+
+On the always-on server:
+
+```bash
+git clone https://github.com/imb0l/persist-dev && cd persist-dev
+./setup.sh
+```
+
+`setup.sh` installs Podman + Tailscale if missing, pulls the prebuilt image, runs the container,
+and prints your connect command. (First-time package installs dominate the clock; the
+clone→run path is instant if Podman + Tailscale are already present.)
+
+## Connect from anywhere
+
+```bash
+# interactive project picker
+mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev menu
+
+# jump straight into a project
+mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev attach <name>
+```
+
+From a phone: open the Tailscale app, then Blink/Termius → `mosh dev@<tailscale-ip> -- dev menu`.
+
+## Multi-project workflow
+
+Every project is its own tmux session, so switching is instant and nothing collides:
+
+| command | what it does |
+| --- | --- |
+| `dev new <name> [git-url]` | create a project dir + tmux session, launch OpenCode inside |
+| `dev ls` | list projects and whether they're attached/detached |
+| `dev attach <name>` | jump into a project's live session |
+| `dev menu` | fzf picker over all projects (default when you connect) |
+| `dev stop <name>` | kill a project's session |
+| `dev rm <name>` | remove a project (asks before deleting files) |
+| `dev backup` | rsync the whole workspace to `BACKUP_TARGET` |
+
+```bash
+dev new api https://github.com/you/api
+dev new web https://github.com/you/web
+dev menu            # pick one, work, detach (Ctrl-b d), pick the other later
+```
+
+## Backup
+
+Set a target and back up the entire workspace in one shot:
+
+```bash
+export BACKUP_TARGET="myserver:/backups/persist"   # or an rclone remote
+dev backup
+```
+
+The workspace is a single mounted volume (`~/.persist/workspace` on the host), so a cron job
+wrapping `dev backup` is all you need for off-box durability.
+
+## Security notes
+
+- The container's `dev` user ships with password `dev`. **Change it** (`passwd` over SSH) or, better,
+  copy your SSH key in: `ssh-copy-id -p 2222 dev@<tailscale-ip>`.
+- Tailscale already encrypts and restricts access to devices you approve — keep it that way; don't
+  also expose port 2222 to the public internet.
+- The prebuilt image is published to `ghcr.io/imb0l/persist-dev`. To build from source yourself,
+  `podman build -t persist-dev -f Containerfile .` (CI does this automatically on push).
+
+## How it fits together
+
+```
+   laptop / phone
+        |  mosh (UDP, roams IPs, survives drops)
+        v
+   Tailscale tunnel  <--->  always-on server
+        |                      |
+   port 2222 / UDP 60000-61000 |
+        v                      v
+   ┌───────────────────────────────────┐
+   | container: persist-dev             |
+   |   sshd + mosh-server               |
+   |   tmux server (dev user)           |
+   |     ├─ proj-foo  (OpenCode)        |
+   |     ├─ proj-bar  (OpenCode)        |
+   |     └─ ...                         |
+   |   volume: /workspace  -->  backed up|
+   └───────────────────────────────────┘
+```
+
+The SSH/mosh pipe is only a viewport. OpenCode runs in a tmux-owned PTY. Kill the viewport and
+OpenCode doesn't notice. Open a new viewport and you're exactly where you left off.
+
+## License
+
+MIT
