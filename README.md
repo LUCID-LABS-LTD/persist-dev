@@ -46,25 +46,57 @@ mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev attach <name>
 
 From a phone: open the Tailscale app, then Blink/Termius → `mosh dev@<tailscale-ip> -- dev menu`.
 
+## Harness-agnostic
+
+OpenCode was just the example. `persist-dev` launches **any** coding-agent TUI inside its own
+resumable tmux session. The four you mentioned come preconfigured:
+
+| harness | launch command | notes |
+| --- | --- | --- |
+| `agy` | `agy -i` | Antigravity CLI (Gemini) |
+| `codex` | `codex` | OpenAI Codex |
+| `claude` | `claude` | Claude Code |
+| `opencode` | `opencode` | default; add more via `dev harness add` |
+
+List or extend them:
+
+```bash
+dev harness list
+dev harness add ollama "ollama run qwen2.5-coder"
+```
+
+Note on **Hermes** (this agent): it runs on your own machine, not inside the dev box, so it's
+excluded by design — you drive `persist-dev` *from* Hermes, you don't run Hermes *in* it.
+
 ## Multi-project workflow
 
 Every project is its own tmux session, so switching is instant and nothing collides:
 
 | command | what it does |
 | --- | --- |
-| `dev new <name> [git-url]` | create a project dir + tmux session, launch OpenCode inside |
-| `dev ls` | list projects and whether they're attached/detached |
+| `dev new <name> [git-url] [--harness H]` | create a project dir + tmux session, launch harness `H` inside |
+| `dev ls` | list projects, attach state, and which harness each uses |
 | `dev attach <name>` | jump into a project's live session |
+| `dev run <name> [harness]` | launch/relaunch a harness inside an existing project's session |
 | `dev menu` | fzf picker over all projects (default when you connect) |
 | `dev stop <name>` | kill a project's session |
 | `dev rm <name>` | remove a project (asks before deleting files) |
 | `dev backup` | rsync the whole workspace to `BACKUP_TARGET` |
 
 ```bash
-dev new api https://github.com/you/api
-dev new web https://github.com/you/web
+dev new api https://github.com/you/api --harness codex
+dev new web https://github.com/you/web --harness agy
+dev new cli https://github.com/you/cli            # defaults to opencode
 dev menu            # pick one, work, detach (Ctrl-b d), pick the other later
 ```
+
+Each harness's own config and auth (OpenCode, Claude, Codex, Gemini/agy tokens) is symlinked
+onto the persistent volume (`/workspace/.config`, `/workspace/.codex`, `/workspace/.gemini`),
+so **credentials and sessions survive a container rebuild** — you re-pull the image and your
+logins are still there.
+
+> Caveat: `agy`'s auth can live in a desktop keyring rather than a plain file, so if it prompts
+> after a rebuild, re-auth once. Codex/Claude/OpenCode file-based config mounts transparently.
 
 ## Backup
 
@@ -114,3 +146,8 @@ OpenCode doesn't notice. Open a new viewport and you're exactly where you left o
 ## License
 
 MIT
+
+## Roadmap / not-yet-done
+- GitHub Actions build of `ghcr.io/imb0l/persist-dev` (needs a PAT with `workflow` scope).
+- Auto-restart a crashed harness inside its session (e.g. `while true; do $HARNESS; done`).
+- `dev backup` of the harness config dirs is included in the `/workspace` rsync.

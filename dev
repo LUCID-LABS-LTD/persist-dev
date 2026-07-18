@@ -1,16 +1,61 @@
 #!/usr/bin/env bash
-# persist-dev project switcher — runs INSIDE the container as the 'dev' user.
+# persist-dev project + harness switcher — runs INSIDE the container as the 'dev' user.
 set -euo pipefail
 
 PROJECTS_DIR="${PROJECTS_DIR:-/workspace/projects}"
+META_DIR="${PROJECTS_DIR}/.persist"
+CONFIG_DIR="${HOME}/.config/persist-dev"
+CONFIG="${CONFIG_DIR}/config"
 TMUX_PREFIX="proj-"
+DEFAULT_HARNESS="opencode"
+
+declare -A HARNESS_CMD=()
+
+load_config() {
+  mkdir -p "$CONFIG_DIR" "$META_DIR"
+  if [ ! -f "$CONFIG" ]; then
+    cat > "$CONFIG" <<'EOF'
+# persist-dev harness configuration
+# DEFAULT_HARNESS is launched by 'dev new' when --harness is omitted.
+DEFAULT_HARNESS=opencode
+
+# known harnesses (name=launch command)
+opencode=opencode
+claude=claude
+codex=codex
+agy=agy -i
+
+# add your own, e.g.:
+# ollama=ollama run qwen2.5-coder
+EOF
+  fi
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "$line" ]] && continue
+    if [[ "$line" =~ ^DEFAULT_HARNESS=(.*)$ ]]; then
+      DEFAULT_HARNESS="${BASH_REMATCH[1]// /}"
+    elif [[ "$line" =~ ^([A-Za-z0-9_-]+)=(.*)$ ]]; then
+      HARNESS_CMD["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+    fi
+  done < "$CONFIG"
+}
+
+harness_resolve() {
+  local name="$1"
+  if [ -z "${HARNESS_CMD[$name]:-}" ]; then
+    echo "unknown harness '$name'. Known harnesses:" >&2
+    for k in "${!HARNESS_CMD[@]}"; do echo "  $k" >&2; done
+    return 1
+  fi
+  echo "${HARNESS_CMD[$name]}"
+}
 
 cmd_ls() {
   mkdir -p "$PROJECTS_DIR"
   local sessions
   sessions=$(tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}" | sed "s/^${TMUX_PREFIX}//;s/:.*//" || true)
   if [ -z "$sessions" ]; then
-    echo "No active projects. Start one with: dev new <name> [git-url]"
+    echo "No active projects. Start one with: dev new <name> [git-url] [--harness H]"
     return 0
   fi
   echo "Active projects:"
@@ -21,15 +66,26 @@ cmd_ls() {
     else
       attached="detached"
     fi
+    local h=""; [ -f "$META_DIR/$s.harness" ] && h="$(cat "$META_DIR/$s.harness")"
     local dir="$PROJECTS_DIR/$s"
-    printf "  %-20s %-9s %s\n" "$s" "$attached" "[$dir]"
+    printf "  %-18s %-9s %-10s %s\n" "$s" "$attached" "${h:--}" "[$dir]"
   done
 }
 
 cmd_new() {
-  local name="${1:?usage: dev new <name> [git-url]}"
-  shift || true
-  local git_url="${1:-}"
+  local name="" git_url="" harness=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --harness)   harness="${2:-}"; shift 2 ;;
+      --harness=*) harness="${1#*=}"; shift ;;
+      -*) echo "unknown option: $1" >&2; exit 1 ;;
+      *) if [ -z "$name" ]; then name="$1"; else git_url="$1"; fi; shift ;;
+    esac
+  done
+  [ -z "$name" ] && { echo "usage: dev new <name> [git-url] [--harness H]"; exit 1; }
+  harness="${harness:-$DEFAULT_HARNESS}"
+  local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
+
   mkdir -p "$PROJECTS_DIR"
   local dir="$PROJECTS_DIR/$name"
   if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
@@ -38,7 +94,7 @@ cmd_new() {
   fi
   mkdir -p "$dir"
   if [ -n "$git_url" ]; then
-    if git clone "$git_url" "$dir"; then
+    if git clone "$git_url" "$dir" 2>/dev/null; then
       echo "Cloned $git_url -> $dir"
     else
       echo "Clone failed; empty project created at $dir"
@@ -50,8 +106,9 @@ cmd_new() {
     exec tmux attach -t "$sess"
   fi
   tmux new-session -d -s "$sess" -c "$dir"
-  tmux send-keys -t "$sess" 'opencode' C-m
-  echo "Created project $name -> $dir  (session $sess)"
+  echo "$harness" > "$META_DIR/$name.harness"
+  tmux send-keys -t "$sess" "$hcmd" C-m
+  echo "Created project $name -> $dir  (session $sess, harness $harness)"
   echo "Attach with: dev attach $name"
 }
 
@@ -63,6 +120,23 @@ cmd_attach() {
     exit 1
   fi
   exec tmux attach -t "$sess"
+}
+
+cmd_run() {
+  local name="${1:?usage: dev run <name> [harness]}"
+  shift || true
+  local harness="${1:-}"
+  [ -z "$harness" ] && [ -f "$META_DIR/$name.harness" ] && harness="$(cat "$META_DIR/$name.harness")"
+  [ -z "$harness" ] && harness="$DEFAULT_HARNESS"
+  local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
+  local sess="${TMUX_PREFIX}${name}"
+  if ! tmux has-session -t "$sess" 2>/dev/null; then
+    mkdir -p "$PROJECTS_DIR/$name"
+    tmux new-session -d -s "$sess" -c "$PROJECTS_DIR/$name"
+    echo "$harness" > "$META_DIR/$name.harness"
+  fi
+  tmux send-keys -t "$sess" "$hcmd" C-m
+  echo "Launched harness '$harness' in project '$name'. Attach with: dev attach $name"
 }
 
 cmd_stop() {
@@ -82,7 +156,7 @@ cmd_rm() {
   local dir="$PROJECTS_DIR/$name"
   read -r -p "Delete project files at $dir ? [y/N] " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
-    rm -rf "$dir" && echo "Removed $name"
+    rm -rf "$dir" "$META_DIR/$name.harness" && echo "Removed $name"
   else
     echo "Kept files."
   fi
@@ -101,6 +175,25 @@ cmd_backup() {
   echo "Backup done."
 }
 
+cmd_harness_list() {
+  echo "DEFAULT_HARNESS=$DEFAULT_HARNESS"
+  echo "Configured harnesses:"
+  for k in "${!HARNESS_CMD[@]}"; do
+    printf "  %-10s %s\n" "$k" "${HARNESS_CMD[$k]}"
+  done
+}
+
+cmd_harness_add() {
+  local name="${1:?usage: dev harness add <name> <launch command>}"
+  shift || true
+  local cmd="$*"
+  [ -z "$cmd" ] && { echo "missing launch command"; exit 1; }
+  grep -v "^${name}=" "$CONFIG" > "$CONFIG.tmp" 2>/dev/null || true
+  mv "$CONFIG.tmp" "$CONFIG"
+  echo "${name}=${cmd}" >> "$CONFIG"
+  echo "Added harness '$name' -> '$cmd'"
+}
+
 cmd_ls_raw() {
   tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}" | sed "s/^${TMUX_PREFIX}//;s/:.*//" || true
 }
@@ -115,16 +208,24 @@ cmd_menu() {
 }
 
 main() {
+  load_config
   local cmd="${1:-menu}"; shift || true
   case "$cmd" in
-    ls|list)   cmd_ls "$@" ;;
-    new)       cmd_new "$@" ;;
-    attach|a)  cmd_attach "$@" ;;
-    stop|kill) cmd_stop "$@" ;;
-    rm|remove) cmd_rm "$@" ;;
-    backup)    cmd_backup "$@" ;;
-    menu|"")   cmd_menu "$@" ;;
-    *)         echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|stop|rm|backup|menu>"; exit 1 ;;
+    ls|list)        cmd_ls "$@" ;;
+    new)            cmd_new "$@" ;;
+    attach|a)       cmd_attach "$@" ;;
+    run|launch)     cmd_run "$@" ;;
+    stop|kill)      cmd_stop "$@" ;;
+    rm|remove)      cmd_rm "$@" ;;
+    backup)         cmd_backup "$@" ;;
+    harness)        sub="${1:-list}"; shift || true
+                    case "$sub" in
+                      list) cmd_harness_list "$@" ;;
+                      add)  cmd_harness_add "$@" ;;
+                      *)    echo "usage: dev harness <list|add>"; exit 1 ;;
+                    esac ;;
+    menu|"")        cmd_menu "$@" ;;
+    *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|backup|harness|menu>"; exit 1 ;;
   esac
 }
 main "$@"
