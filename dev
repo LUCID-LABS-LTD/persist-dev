@@ -108,7 +108,7 @@ cmd_new() {
   fi
   tmux new-session -d -s "$sess" -c "$dir"
   echo "$harness" > "$META_DIR/$name.harness"
-  tmux send-keys -t "$sess" "$hcmd" C-m
+  tmux send-keys -t "$sess" "dev-harness $name $hcmd" C-m
   echo "Created project $name -> $dir  (session $sess, harness $harness)"
   echo "Attach with: dev attach $name"
 }
@@ -117,8 +117,8 @@ cmd_attach() {
   local name="${1:?usage: dev attach <name>}"
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
-    echo "No session for '$name'. Create it with: dev new $name"
-    exit 1
+    echo "No session for '$name'; creating one..."
+    cmd_new "$name"
   fi
   exec tmux attach -t "$sess"
 }
@@ -136,7 +136,7 @@ cmd_run() {
     tmux new-session -d -s "$sess" -c "$PROJECTS_DIR/$name"
     echo "$harness" > "$META_DIR/$name.harness"
   fi
-  tmux send-keys -t "$sess" "$hcmd" C-m
+  tmux send-keys -t "$sess" "dev-harness $name $hcmd" C-m
   echo "Launched harness '$harness' in project '$name'. Attach with: dev attach $name"
 }
 
@@ -170,10 +170,88 @@ cmd_backup() {
     echo "Example: export BACKUP_TARGET='myserver:/backups/persist' && dev backup"
     exit 1
   fi
-  echo "Backing up $PROJECTS_DIR -> $target"
-  mkdir -p "$PROJECTS_DIR"
-  rsync -az --delete "$PROJECTS_DIR/" "$target/"
+  echo "Backing up /workspace (projects + agent config) -> $target"
+  mkdir -p /workspace
+  rsync -az --delete /workspace/ "$target/"
   echo "Backup done."
+}
+
+cmd_rename() {
+  local old="${1:?usage: dev rename <old> <new>}"
+  local new="${2:?usage: dev rename <old> <new>}"
+  [ "$old" = "$new" ] && { echo "names are the same"; exit 1; }
+  local osess="${TMUX_PREFIX}${old}" nsess="${TMUX_PREFIX}${new}"
+  if [ -d "$PROJECTS_DIR/$new" ]; then echo "target '$new' already exists"; exit 1; fi
+  if tmux has-session -t "$osess" 2>/dev/null; then
+    tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "rename failed (session busy?)"; exit 1; }
+  fi
+  mv "$PROJECTS_DIR/$old" "$PROJECTS_DIR/$new" 2>/dev/null || true
+  [ -f "$META_DIR/$old.harness" ] && mv "$META_DIR/$old.harness" "$META_DIR/$new.harness" 2>/dev/null
+  echo "Renamed $old -> $new"
+}
+
+cmd_log() {
+  local name="${1:?usage: dev log <name>}"
+  local sess="${TMUX_PREFIX}${name}"
+  if ! tmux has-session -t "$sess" 2>/dev/null; then
+    echo "No session for '$name'."; exit 1
+  fi
+  echo "=== scrollback for $name (last 4000 lines) ==="
+  tmux capture-pane -p -t "$sess" -S -4000 2>/dev/null || echo "(no scrollback available)"
+}
+
+cmd_doctor() {
+  echo "persist-dev doctor"
+  echo "--- tmux server ---"
+  if tmux info >/dev/null 2>&1; then echo "  [ok] tmux server running"; else echo "  [FAIL] tmux server not running"; fi
+  echo "--- volume /workspace ---"
+  if [ -w /workspace ]; then echo "  [ok] /workspace writable"; else echo "  [FAIL] /workspace not writable"; fi
+  echo "--- configured harnesses ---"
+  for k in "${!HARNESS_CMD[@]}"; do
+    local bin="${HARNESS_CMD[$k]%% *}"
+    if command -v "$bin" >/dev/null 2>&1; then echo "  [ok] $k ($bin)"; else echo "  [WARN] $k not installed: ${HARNESS_CMD[$k]}"; fi
+  done
+  echo "--- tailscale ---"
+  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then echo "  [ok] tailscale connected"; else echo "  [WARN] tailscale not connected"; fi
+  echo "--- projects ---"
+  cmd_ls_raw | sed 's/^/  /' || echo "  (none)"
+}
+
+# Req #1 (from the original voice spec): sync agent context across sessions.
+# All context lives on the persistent volume (/workspace/.context) so every
+# session sees the same notes, it's included in `dev backup`, and `dev ctx
+# sync/pull` pushes/pulls it to BACKUP_TARGET for cross-machine continuity.
+CTX_DIR="${CTX_DIR:-/workspace/.context}"
+cmd_ctx() {
+  mkdir -p "$CTX_DIR"
+  local sub="${1:-show}"; shift || true
+  case "$sub" in
+    show|ls)
+      echo "Agent context store: $CTX_DIR"
+      echo "Files:"
+      ls -1 "$CTX_DIR" 2>/dev/null | sed 's/^/  /'
+      [ -z "$(ls -A "$CTX_DIR" 2>/dev/null)" ] && echo "  (empty — create one with: dev ctx edit <name>)"
+      ;;
+    edit)
+      local name="${1:-NOTES}"; shift || true
+      local f="$CTX_DIR/${name}.md"
+      [ -f "$f" ] || printf '# Context: %s\n\n' "$name" > "$f"
+      ${EDITOR:-vi} "$f"
+      ;;
+    sync)
+      local target="${BACKUP_TARGET:-}"
+      [ -z "$target" ] && { echo "Set BACKUP_TARGET to sync context."; exit 1; }
+      rsync -az "$CTX_DIR/" "$target/context/"
+      echo "Synced context -> $target/context/"
+      ;;
+    pull)
+      local target="${BACKUP_TARGET:-}"
+      [ -z "$target" ] && { echo "Set BACKUP_TARGET to pull context."; exit 1; }
+      rsync -az "$target/context/" "$CTX_DIR/"
+      echo "Pulled context <- $target/context/"
+      ;;
+    *) echo "usage: dev ctx [show|edit <name>|sync|pull]" ;;
+  esac
 }
 
 cmd_harness_list() {
@@ -218,6 +296,10 @@ main() {
     run|launch)     cmd_run "$@" ;;
     stop|kill)      cmd_stop "$@" ;;
     rm|remove)      cmd_rm "$@" ;;
+    rename|mv)      cmd_rename "$@" ;;
+    log)            cmd_log "$@" ;;
+    doctor|check)   cmd_doctor "$@" ;;
+    ctx)            cmd_ctx "$@" ;;
     backup)         cmd_backup "$@" ;;
     harness)        sub="${1:-list}"; shift || true
                     case "$sub" in
@@ -226,7 +308,7 @@ main() {
                       *)    echo "usage: dev harness <list|add>"; exit 1 ;;
                     esac ;;
     menu|"")        cmd_menu "$@" ;;
-    *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|backup|harness|menu>"; exit 1 ;;
+    *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|rename|log|doctor|ctx|backup|harness|menu>"; exit 1 ;;
   esac
 }
 main "$@"
