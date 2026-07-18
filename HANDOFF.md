@@ -17,7 +17,7 @@ The core idea: the *work* (tmux session + agent TUI) is decoupled from the *conn
 (mosh over Tailscale). SSH/mosh is only a viewport. The agent runs in a tmux-owned PTY, so
 killing the viewer leaves the agent running; a new viewer shows the exact same live session.
 
-Repo: **https://github.com/imb0l/persist-dev** (public, branch `main`).
+> Repo: **https://github.com/LUCID-LABS-LTD/persist-dev** (private, branch `main`).
 
 ---
 
@@ -87,10 +87,11 @@ mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev menu
 
 | file | role |
 | --- | --- |
-| `dev` | The project/harness switcher CLI (runs as `dev` user inside container). Subcommands: `ls new attach run stop rm backup harness menu`. |
-| `entrypoint.sh` | Container init: ssh-keygen, start sshd, symlink agent config dirs onto `/workspace`, `tmux start-server`, keep-alive. |
-| `setup.sh` | Host bootstrap: install podman+tailscale, `tailscale up`, pull-or-build image, `podman run`, print connect cmd. |
-| `Containerfile` | debian-slim + sshd + mosh + tmux + fzf + sudo + node/npm; installs opencode, omp, claude, codex. |
+| `dev` | The project/harness switcher CLI (runs as `dev` user). Subcommands: `ls new attach run stop rm rename log doctor ctx backup harness menu`. |
+| `dev-harness` | Auto-restart wrapper launched by `dev new`/`dev run`; restarts a crashed harness (clean quit / Ctrl-C does not restart). |
+| `entrypoint.sh` | Container init: ssh-keygen, start sshd, ensure the bind-mounted agent-config dirs are owned by `dev`, `tmux start-server`, keep-alive. |
+| `setup.sh` | Host bootstrap: install podman+tailscale, `tailscale up`, pull-or-build image, `podman run` (with agent-config bind mounts + optional resource limits), print connect cmd. Flags: `--secure`, `--cron`, `--cron-remove`. |
+| `Containerfile` | debian-slim + sshd + mosh + tmux + fzf + sudo + node/npm; installs **pinned** opencode (0.0.55), omp (v17.0.4), claude-code (2.1.214), codex (0.144.5). |
 | `config/tmux.conf` | tmux server config (256color, mouse, history 50k). |
 | `config/sshd_config` | sshd config (port 22, password+key auth, no root). |
 | `README.md` | User docs: 5-min setup, harness table, multi-project workflow, backup, security, roadmap. |
@@ -99,113 +100,84 @@ mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev menu
 
 ---
 
-## 5. ⚠️ OPEN QUESTION — clarify before finalizing
+## 5. OPEN QUESTION — RESOLVED
 
-The original voice spec listed three requirements. **Requirement #1 was cut off by STT:**
-> "…the problems I'm facing now is one, important information needs to be ___ … two data needs
-> to be easy to back up and three it has to be resumable…"
+The original voice spec listed three requirements. #2 (easy backup) and #3 (resumable) were
+implemented. #1 was cut off by STT: "…important information needs to be ___ …".
 
-Requirements #2 (easy backup) and #3 (resumable) are implemented. **Requirement #1 is unknown.**
-It may change a `dev` subcommand (e.g. syncing agent context/notes across sessions, or a
-knowledge store). **Ask the user (Imbol, @imb0l_1 on Telegram, UTC+1) what requirement #1 is**
-before you declare the project "done". Do not invent it.
+**RESOLVED:** Imbol confirmed requirement #1 = **"sync agent context across sessions."**
+Implemented as the `dev ctx` subcommand (see §6 T5b / README). Context lives in a shared store
+on the volume (`/workspace/.context`), is visible to every session, is included in `dev backup`,
+and syncs across machines via `dev ctx sync` / `dev ctx pull`. **No open questions remain.**
 
 ---
 
-## 6. Roadmap (execute in this order)
+## 6. Roadmap (all implemented)
 
-### T1 — Publish the prebuilt image (GitHub Actions / GHCR)
-BLOCKER: the current GitHub PAT lacks the `workflow` scope, so pushing `.github/workflows/*.yml`
-was rejected (`refusing to allow a Personal Access Token to create or update workflow ... without
-'workflow' scope`). Fix: use a **fine-grained PAT** (or GitHub App) with `workflow` permission on
-repo `imb0l/persist-dev`, then commit this file as `.github/workflows/build.yml`:
+### T1 — Prebuilt image (GitHub Actions / GHCR) ✅
+`.github/workflows/build.yml` builds and pushes `ghcr.io/LUCID-LABS-LTD/persist-dev:latest`
+(and `:${{ github.sha }}`) on every push to `main` / `v*` tag. The repo's PAT has the
+`workflow` scope, so the file committed cleanly and CI runs. `setup.sh` pulls it; on failure it
+falls back to a local `podman build`. Multi-arch (arm64) stays OUT OF SCOPE.
 
-```yaml
-name: build
-on:
-  push:
-    branches: [main]
-    tags: ['v*']
-permissions:
-  contents: read
-  packages: write
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-```
+### T2 — Auto-restart a crashed harness ✅
+`dev new` / `dev run` launch the harness via `dev-harness` (on PATH in the container), which wraps
+the agent in a restart loop: restarts on crash, but NOT on clean exit (0) or SIGINT/SIGTERM
+(130/143 — your Ctrl-C quit). Touch `/workspace/projects/.persist/<name>.norestart` to stop the
+loop without killing the agent. `dev run` remains the manual relaunch path.
 
-After it's green, `setup.sh`'s `podman pull ghcr.io/imb0l/persist-dev:latest` will succeed
-instead of falling back to a local build. Multi-arch (arm64) is explicitly OUT OF SCOPE (user
-said no Pi / no arm64).
+### T3 — Pinned installer versions ✅
+`Containerfile` no longer floats `curl … | sh`:
+- opencode `0.0.55`  (`opencode.ai/install --version`)
+- omp `v17.0.4`       (`omp.sh/install --ref`)
+- `@anthropic-ai/claude-code@2.1.214`, `@openai/codex@0.144.5` (npm)
+Each keeps the `|| echo skipped` fallback so an offline build still succeeds.
 
-### T2 — Auto-restart a crashed harness
-Today, if a harness TUI crashes, `dev attach` shows a dead shell. Decide ONE approach:
-- **(a)** Wrap launch in `dev new`/`dev run`: send a loop into the pane, e.g.
-  `tmux send-keys -t $sess "while true; do $cmd; echo '[crashed] restarting in 2s'; sleep 2; done" C-m`.
-  Caveat: TUI agents don't love being in a `while` loop (Ctrl-C exits the loop, not just the agent).
-- **(b)** Document `tmux respawn-pane -k -t proj-X` for manual recovery (already effectively
-  covered by `dev run`).
-- **(c)** Add a `dev watch <name>` that monitors the pane and respawns on exit.
-Pick (a) or (c) and implement; update README. Keep `dev run` as the manual relaunch path.
+### T4 — Security hardening ✅
+- `./setup.sh --secure` forces a non-default `dev` password (or generates a random one) and can
+  switch the container to **key-only** SSH (`PasswordAuthentication no` + sshd reload).
+- Port 2222 / UDP 60000-61000 are Tailscale-only — never expose to the public internet.
+- Optional podman resource limits via `PERSIST_MEM` / `PERSIST_CPUS` (e.g. `4g` / `2.0`).
 
-### T3 — Pin installer versions for reproducibility
-`Containerfile` currently uses floating `curl ... | sh` for opencode and omp. Replace with
-pinned release URLs (research current stable release tags on each project's GitHub) so a build
-is reproducible and not subject to an upstream change breaking the image. Keep the
-`|| echo skipped` fallback.
+### T5 — Richer `dev` commands ✅
+- `dev doctor` — tmux server, /workspace writable, each harness installed?, tailscale up?, projects.
+- `dev rename <old> <new>` — moves dir + tmux session + `.harness` meta.
+- `dev attach <name>` — auto-creates the project if the session is missing.
+- `dev log <name>` — prints the session scrollback (`capture-pane`).
 
-### T4 — Security hardening
-- `setup.sh`: after first boot, **force** a `dev` password change or require `ssh-copy-id`; the
-  default password is `dev` (shipped knowingly — must be changed).
-- Optionally disable password auth once a key is present (`PasswordAuthentication no` in
-  `config/sshd_config`, regenerated by setup).
-- Document clearly: **never expose port 2222 to the public internet** — Tailscale-only. The
-  mosh UDP range (60000-61000) must be reachable on the Tailscale interface.
-- Optional: add podman resource limits (`--memory`, `--cpus`) in `setup.sh` so one project
-  can't starve the box.
+### T5b — Requirement #1: sync agent context across sessions ✅
+`dev ctx` — a shared context store at `/workspace/.context` (one place, visible to every session):
+- `dev ctx edit <name>` opens a markdown note; `dev ctx show` lists them.
+- Included in `dev backup` (whole-workspace rsync) and synced across machines with
+  `dev ctx sync` / `dev ctx pull` (pushes/pulls to `BACKUP_TARGET/context`).
 
-### T5 — Richer `dev` commands
-- `dev doctor` — healthcheck: tmux server up? harnesses installed? tailscale connected? volume mounted?
-- `dev rename <old> <new>` — move project dir + session.
-- `dev attach <name>` — if session missing, offer to `dev new` it (currently errors).
-- `dev log <name>` — tail the pane scrollback / a session log.
+### T6 — Docs ✅
+Per-harness auth table + troubleshooting live in `README.md` (Persistence / Per-harness auth /
+Security notes). `agy` may need one re-auth after a rebuild (keyring); everything else mounts
+transparently via the bind-mounted volume dirs.
 
-### T6 — Docs
-- Per-harness auth section: agy (keyring caveat — may need one re-auth after rebuild), omp
-  (provider keys in `~/.omp/.env` or env like `GEMINI_API_KEY`), claude/codex (file config under
-  `~/.config`), opencode. All persist via the symlinks.
-- Troubleshooting: "mosh hangs" (UDP 60000-61000 blocked / not on tailscale iface), "can't reach
-  box" (tailscale down — `tailscale status`), "session frozen" (detach `Ctrl-b d`, re-`dev attach`).
+### T7 — Cron backup wrapper ✅
+`./setup.sh --cron` writes a host crontab entry that runs `dev backup` every 6h to
+`BACKUP_TARGET` (needs `BACKUP_TARGET` set). `--cron-remove` deletes it. `dev backup` now rsyncs
+the **whole** `/workspace` (projects + agent config), so creds/context are actually backed up
+(previously only `projects/` was covered).
 
-### T7 — Cron backup wrapper
-Add a `setup.sh --cron` (or document) that schedules `dev backup` (e.g. every 6h) to
-`$BACKUP_TARGET`. The rsync already covers all agent config dirs via the symlinks.
+### Persistence model (changed from symlinks → bind mounts)
+Agent config dirs (`~/.config`, `~/.codex`, `~/.gemini`, `~/.omp`) are now **bind-mounted** from
+the volume (`$DATA_DIR/{.config,.codex,.gemini,.omp}`) straight onto the dev home by `podman run`.
+`entrypoint.sh` no longer symlinks; it just ensures the dirs exist and are owned by `dev`. This is
+rm-rf-safe: an agent that deletes its config dir can't orphan persistence the way a symlink could.
 
 ---
 
 ## 7. Definition of done
 
-- [ ] Prebuilt GHCR image builds via CI (T1).
-- [ ] At least one harness auto-relaunches on crash (T2).
-- [ ] Installers pinned (T3).
-- [ ] Security: default password forced-changed / key-only path documented (T4).
-- [ ] `dev doctor` + auth + troubleshooting docs present (T5, T6).
-- [ ] **Requirement #1 clarified with the user and implemented or explicitly deferred (§5).**
+- [x] Prebuilt GHCR image builds via CI (T1).
+- [x] At least one harness auto-relaunches on crash (T2).
+- [x] Installers pinned (T3).
+- [x] Security: default password forced-changed / key-only path documented (T4).
+- [x] `dev doctor` + auth + troubleshooting docs present (T5, T6).
+- [x] **Requirement #1 clarified with the user and implemented (`dev ctx`, §5/§6 T5b).**
 - [ ] Live test performed by the user (or a documented test plan with expected output).
 
 ---

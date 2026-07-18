@@ -26,7 +26,7 @@ OpenCode session. Zero lost state.
 On the always-on server:
 
 ```bash
-git clone https://github.com/imb0l/persist-dev && cd persist-dev
+git clone https://github.com/LUCID-LABS-LTD/persist-dev && cd persist-dev
 ./setup.sh
 ```
 
@@ -75,14 +75,18 @@ Every project is its own tmux session, so switching is instant and nothing colli
 
 | command | what it does |
 | --- | --- |
-| `dev new <name> [git-url] [--harness H]` | create a project dir + tmux session, launch harness `H` inside |
+| `dev new <name> [git-url] [--harness H]` | create a project dir + tmux session, launch harness `H` (auto-restarts on crash) |
 | `dev ls` | list projects, attach state, and which harness each uses |
-| `dev attach <name>` | jump into a project's live session |
+| `dev attach <name>` | jump into a project's live session (auto-creates it if missing) |
 | `dev run <name> [harness]` | launch/relaunch a harness inside an existing project's session |
-| `dev menu` | fzf picker over all projects (default when you connect) |
 | `dev stop <name>` | kill a project's session |
 | `dev rm <name>` | remove a project (asks before deleting files) |
-| `dev backup` | rsync the whole workspace to `BACKUP_TARGET` |
+| `dev rename <old> <new>` | move a project dir + session + metadata |
+| `dev log <name>` | print a project session's scrollback |
+| `dev doctor` | health check: tmux, volume, harnesses installed, tailscale |
+| `dev ctx [show\|edit <name>\|sync\|pull]` | shared agent-context store (req #1: sync context across sessions) |
+| `dev backup` | rsync the whole workspace (projects + agent config) to `BACKUP_TARGET` |
+| `dev harness list\|add` | list or add a custom harness |
 
 ```bash
 dev new api https://github.com/you/api --harness codex
@@ -91,15 +95,24 @@ dev new cli https://github.com/you/cli            # defaults to opencode
 dev menu            # pick one, work, detach (Ctrl-b d), pick the other later
 ```
 
-Each harness's own config and auth (OpenCode, Claude, Codex, Gemini/agy, and Oh My Pi/omp
-tokens) is symlinked onto the persistent volume (`/workspace/.config`, `/workspace/.codex`,
-`/workspace/.gemini`, `/workspace/.omp`), so **credentials and sessions survive a container
-rebuild** — you re-pull the image and your logins are still there.
+All agent config and auth (OpenCode, Claude, Codex, Gemini/agy, and Oh My Pi/omp) lives on the
+persistent volume and is **bind-mounted** straight onto the dev home (`~/.config`, `~/.codex`,
+`~/.gemini`, `~/.omp`), so **credentials and sessions survive a container rebuild** — you
+re-pull the image and your logins are still there. (We bind-mount rather than symlink, so an
+agent that does `rm -rf` on its config dir can't break persistence.)
 
-> Caveat: `agy`'s auth can live in a desktop keyring rather than a plain file, so if it prompts
-> after a rebuild, re-auth once. Codex/Claude/OpenCode file-based config mounts transparently.
-> `omp` stores provider keys in `~/.omp/.env` / `~/.omp/agent/.env` (or env vars like
-> `GEMINI_API_KEY`); all of that lives under the symlinked `~/.omp`, so it persists too.
+### Per-harness auth
+
+| harness | where creds live | notes |
+| --- | --- | --- |
+| `opencode` | `~/.config/opencode` | file-based; mounts transparently |
+| `claude` | `~/.config/claude` | file-based; mounts transparently |
+| `codex` | `~/.config/codex` (or `~/.codex`) | file-based; mounts transparently |
+| `agy` | desktop keyring *or* `~/.config/gemini` | keyring creds may need one re-auth after a rebuild |
+| `omp` | `~/.omp/.env` / `~/.omp/agent/.env` (or env like `GEMINI_API_KEY`) | all under the bind-mounted `~/.omp` |
+
+> If a harness prompts for auth after a rebuild, re-auth once — the renewed creds are written
+> back onto the volume and persist from then on.
 
 ## Backup
 
@@ -119,7 +132,7 @@ wrapping `dev backup` is all you need for off-box durability.
   copy your SSH key in: `ssh-copy-id -p 2222 dev@<tailscale-ip>`.
 - Tailscale already encrypts and restricts access to devices you approve — keep it that way; don't
   also expose port 2222 to the public internet.
-- The prebuilt image is published to `ghcr.io/imb0l/persist-dev`. To build from source yourself,
+The prebuilt image is published to `ghcr.io/LUCID-LABS-LTD/persist-dev`. To build from source yourself,
   `podman build -t persist-dev -f Containerfile .` (CI does this automatically on push).
 
 ## How it fits together
@@ -150,21 +163,21 @@ OpenCode doesn't notice. Open a new viewport and you're exactly where you left o
 
 MIT
 
-## Roadmap / not-yet-done
+## Status / roadmap
 
 See **`HANDOFF.md`** for the full continuation brief (architecture, current state, gaps, and the
-exact tasks below) — it's written so another agent can clone the repo and pick up where this
-left off.
+tasks below) — it's written so another agent can clone the repo and pick up where this left off.
 
-- **T1** — Publish prebuilt image via GitHub Actions → `ghcr.io/imb0l/persist-dev` (blocked: the
-  GitHub PAT lacks the `workflow` scope; use a fine-grained token, then commit `.github/workflows/build.yml`).
-- **T2** — Auto-restart a crashed harness inside its session (`while true` loop / `tmux respawn-pane` / `dev watch`).
-- **T3** — Pin installer versions (opencode, omp) instead of floating `curl … | sh`.
-- **T4** — Security hardening: force-change the default `dev` password, document key-only + Tailscale-only access, optional podman resource limits.
-- **T5** — Richer `dev`: `doctor`, `rename`, auto-create on `attach`, `log`.
-- **T6** — Docs: per-harness auth + troubleshooting.
-- **T7** — Cron wrapper for `dev backup`.
+- **T1** — ✅ Prebuilt image published via GitHub Actions → `ghcr.io/LUCID-LABS-LTD/persist-dev` (`.github/workflows/build.yml`, builds on push to `main`).
+- **T2** — ✅ Auto-restart a crashed harness: `dev new`/`dev run` launch via `dev-harness`, which restarts the agent on crash (clean quit / Ctrl-C does not restart).
+- **T3** — ✅ Installer versions pinned (opencode `0.0.55`, omp `v17.0.4`, claude-code `2.1.214`, codex `0.144.5`).
+- **T4** — ✅ Security: `./setup.sh --secure` forces a new `dev` password and can switch to key-only SSH; port 2222 is Tailscale-only; optional podman `--memory`/`--cpus` via `PERSIST_MEM`/`PERSIST_CPUS`.
+- **T5** — ✅ `dev doctor`, `dev rename`, `dev attach` auto-creates, `dev log`.
+- **T6** — ✅ Per-harness auth table + troubleshooting (see above).
+- **T7** — ✅ `./setup.sh --cron` schedules `dev backup` every 6h (needs `BACKUP_TARGET`).
 
-**Open question (must resolve before "done"):** requirement #1 from the original voice spec was
-cut off by STT ("important information needs to be ___"). Ask Imbol what it is — it may change a
-`dev` subcommand.
+**Requirement #1 (resolved):** the original voice spec was cut off by STT at
+"important information needs to be ___". Imbol confirmed it: **sync agent context across
+sessions**. Implemented as `dev ctx` — a shared context store on the volume (visible to every
+session, included in `dev backup`, and `dev ctx sync`/`pull` moves it to `BACKUP_TARGET` for
+cross-machine continuity).
