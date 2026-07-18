@@ -11,7 +11,12 @@ DEFAULT_HARNESS="opencode"
 
 declare -A HARNESS_CMD=()
 
+# Loads harness config from $CONFIG (created with sane defaults on first run).
+# Format: one `name=command` per line; `#` starts a comment. The name charset is
+# strict so a malformed line can't become an arbitrary command; the command half
+# is run by the shell inside the tmux pane (you control your own config).
 load_config() {
+  CONFIG="${CONFIG_DIR}/config"
   mkdir -p "$CONFIG_DIR" "$META_DIR"
   if [ ! -f "$CONFIG" ]; then
     cat > "$CONFIG" <<'EOF'
@@ -51,6 +56,19 @@ harness_resolve() {
   echo "${HARNESS_CMD[$name]}"
 }
 
+# Reject project names that could escape the projects dir or break tmux/shell.
+# Allowed chars: A-Za-z0-9 _ . -  (no '/', no "..", no spaces).
+valid_name() {
+  local n="$1"
+  if [ -z "$n" ]; then echo "project name required" >&2; return 1; fi
+  if [[ "$n" == *"/"* ]] || [[ "$n" == *".."* ]] || [[ "$n" == *" "* ]]; then
+    echo "invalid project name '$n' (no '/', '..', or spaces)" >&2; return 1
+  fi
+  if [[ ! "$n" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "invalid project name '$n' (allowed: A-Za-z0-9 _ . -)" >&2; return 1
+  fi
+  return 0
+}
 cmd_ls() {
   mkdir -p "$PROJECTS_DIR"
   local sessions
@@ -77,13 +95,14 @@ cmd_new() {
   local name="" git_url="" harness=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --harness)   harness="${2:-}"; shift 2 ;;
+      --harness)   harness="${2:?--harness requires a value}"; shift 2 ;;
       --harness=*) harness="${1#*=}"; shift ;;
       -*) echo "unknown option: $1" >&2; exit 1 ;;
       *) if [ -z "$name" ]; then name="$1"; else git_url="$1"; fi; shift ;;
     esac
   done
   [ -z "$name" ] && { echo "usage: dev new <name> [git-url] [--harness H]"; exit 1; }
+  valid_name "$name" || exit 1
   harness="${harness:-$DEFAULT_HARNESS}"
   local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
 
@@ -115,6 +134,7 @@ cmd_new() {
 
 cmd_attach() {
   local name="${1:?usage: dev attach <name>}"
+  valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
     echo "No session for '$name'; creating one..."
@@ -124,7 +144,7 @@ cmd_attach() {
 }
 
 cmd_run() {
-  local name="${1:?usage: dev run <name> [harness]}"
+  local name="${1:?usage: dev run <name> [harness]}"; valid_name "$name" || exit 1
   shift || true
   local harness="${1:-}"
   [ -z "$harness" ] && [ -f "$META_DIR/$name.harness" ] && harness="$(cat "$META_DIR/$name.harness")"
@@ -141,7 +161,7 @@ cmd_run() {
 }
 
 cmd_stop() {
-  local name="${1:?usage: dev stop <name>}"
+  local name="${1:?usage: dev stop <name>}"; valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if tmux kill-session -t "$sess" 2>/dev/null; then
     echo "Stopped $name"
@@ -151,7 +171,7 @@ cmd_stop() {
 }
 
 cmd_rm() {
-  local name="${1:?usage: dev rm <name>}"
+  local name="${1:?usage: dev rm <name>}"; valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   tmux kill-session -t "$sess" 2>/dev/null || true
   local dir="$PROJECTS_DIR/$name"
@@ -172,13 +192,18 @@ cmd_backup() {
   fi
   echo "Backing up /workspace (projects + agent config) -> $target"
   mkdir -p /workspace
-  rsync -az --delete /workspace/ "$target/"
+  if [ -n "${BACKUP_PRUNE:-}" ]; then
+    echo "  (BACKUP_PRUNE set: mirroring target with --delete)"
+    rsync -az --delete /workspace/ "$target/"
+  else
+    rsync -az /workspace/ "$target/"
+  fi
   echo "Backup done."
 }
 
 cmd_rename() {
-  local old="${1:?usage: dev rename <old> <new>}"
-  local new="${2:?usage: dev rename <old> <new>}"
+  local old="${1:?usage: dev rename <old> <new>}"; local new="${2:?usage: dev rename <old> <new>}"
+  valid_name "$old" || exit 1; valid_name "$new" || exit 1
   [ "$old" = "$new" ] && { echo "names are the same"; exit 1; }
   local osess="${TMUX_PREFIX}${old}" nsess="${TMUX_PREFIX}${new}"
   if [ -d "$PROJECTS_DIR/$new" ]; then echo "target '$new' already exists"; exit 1; fi
@@ -191,7 +216,7 @@ cmd_rename() {
 }
 
 cmd_log() {
-  local name="${1:?usage: dev log <name>}"
+  local name="${1:?usage: dev log <name>}"; valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
     echo "No session for '$name'."; exit 1
@@ -311,4 +336,6 @@ main() {
     *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|rename|log|doctor|ctx|backup|harness|menu>"; exit 1 ;;
   esac
 }
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

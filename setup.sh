@@ -41,7 +41,7 @@ detect_pkg() {
 pkg_install() {
   detect_pkg
   case "$PKG" in
-    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || true; $SUDO apt-get install -y "$@" ;;
+    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || echo "  [warn] apt update failed; install may use stale indexes"; $SUDO apt-get install -y "$@" ;;
     dnf)    $SUDO dnf install -y "$@" ;;
     yum)    $SUDO yum install -y "$@" ;;
     pacman) $SUDO pacman -S --noconfirm "$@" ;;
@@ -62,7 +62,12 @@ install_tailscale() {
   if command -v tailscale >/dev/null 2>&1; then return 0; fi
   echo "== installing tailscale =="
   command -v curl >/dev/null 2>&1 || pkg_install curl
-  curl -fsSL https://tailscale.com/install.sh | $SUDO sh
+  # Tailscale's installer is fetched over HTTPS and run as root (or via sudo).
+  # Download to a temp file first rather than piping curl straight into sh.
+  local ts_script; ts_script=$(mktemp)
+  curl -fsSL https://tailscale.com/install.sh -o "$ts_script"
+  $SUDO sh "$ts_script"
+  rm -f "$ts_script"
 }
 
 pull_or_build() {
@@ -84,7 +89,11 @@ run_container() {
     echo "== restarted existing container =="
   else
     mkdir -p "$DATA_DIR"/.config "$DATA_DIR"/.codex "$DATA_DIR"/.gemini "$DATA_DIR"/.omp
-    podman run -d --name "$CONTAINER" \
+  # Bind-mount the whole volume at /workspace AND its agent-config subdirs onto
+  # the dev home. The subdir mounts are nested inside $DATA_DIR on purpose:
+  # /workspace/.config etc. resolve to the very volume paths mounted at
+  # /home/dev/.config, so config persists without symlinks.
+  podman run -d --name "$CONTAINER" \
       -p "$PORT_SSH:22" \
       -p 60000-61000:60000-61000/udp \
       -v "$DATA_DIR:/workspace" \
@@ -115,7 +124,7 @@ secure_server() {
   echo "  ssh-copy-id -p $PORT_SSH dev@$ip"
   read -r -p "  Disable password SSH auth entirely (key-only)? [y/N] " konly
   if [[ "$konly" =~ ^[Yy]$ ]]; then
-    podman exec "$CONTAINER" sh -c "sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config; pkill -HUP sshd" || true
+    podman exec "$CONTAINER" sh -c "sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config; sshd -t && { pid=\$(cat /run/sshd.pid 2>/dev/null); [ -n \"\$pid\" ] && kill -HUP \$pid || pkill -HUP sshd; } || true"
     echo "  password auth disabled in container; sshd reloaded. Restart the container if sshd didn't pick it up."
   fi
 }

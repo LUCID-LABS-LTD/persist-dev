@@ -103,7 +103,7 @@ Every project is its own tmux session, so switching is instant and nothing colli
 | `dev log <name>` | print a project session's scrollback |
 | `dev doctor` | health check: tmux, volume, harnesses installed, tailscale |
 | `dev ctx [show\|edit <name>\|sync\|pull]` | shared agent-context store (req #1: sync context across sessions) |
-| `dev backup` | rsync the whole workspace (projects + agent config) to `BACKUP_TARGET` |
+| `dev backup` | rsync the whole workspace to `BACKUP_TARGET` (safe copy; `BACKUP_PRUNE=1` for mirror/`--delete`) |
 | `dev harness list\|add` | list or add a custom harness |
 
 ```bash
@@ -138,11 +138,15 @@ Set a target and back up the entire workspace in one shot:
 
 ```bash
 export BACKUP_TARGET="myserver:/backups/persist"   # or an rclone remote
-dev backup
+dev backup                                      # safe copy (only new/changed files)
+export BACKUP_PRUNE=1; dev backup                # mirror mode: also deletes files absent from source
 ```
 
 The workspace is a single mounted volume (`~/.persist/workspace` on the host), so a cron job
 wrapping `dev backup` is all you need for off-box durability.
+
+> Project names are restricted to `A-Za-z0-9 _ . -` (no `/`, `..`, or spaces). They map
+> directly to a directory under `/workspace/projects`, so path traversal is not possible.
 
 ## Security notes
 

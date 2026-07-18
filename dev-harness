@@ -5,27 +5,47 @@
 # Restart policy:
 #   - clean quit (exit 0)        -> do NOT restart
 #   - SIGINT / SIGTERM (130/143) -> user meant to quit -> do NOT restart
-#   - any other exit (crash)     -> restart after a short delay
+#   - any other exit (crash)     -> restart with exponential backoff, up to
+#     DEV_HARNESS_MAX tries (default 20). After that, give up.
 #
-# To bounce the restart loop without killing the agent, touch the stop flag:
+# To stop the restart loop, touch the flag file:
 #   touch /workspace/projects/.persist/<name>.norestart
+# The loop checks the flag at the TOP of each iteration and exits cleanly
+# WITHOUT spawning another harness instance.
 set -u
-name="${1:?usage: dev-harness <name> <harness cmd...>}"
-shift
-cmd=("$@")
-flag="/workspace/projects/.persist/$name.norestart"
-while true; do
-  if [ -f "$flag" ]; then
-    rm -f "$flag"
+
+run_harness() {
+  name="${1:?usage: dev-harness <name> <harness cmd...>}"
+  shift || true
+  cmd=("$@")
+  flag_dir="${DEV_HARNESS_FLAG_DIR:-/workspace/projects/.persist}"
+  flag="$flag_dir/$name.norestart"
+  max_tries="${DEV_HARNESS_MAX:-20}"
+  delay="${DEV_HARNESS_BASE_DELAY:-3}"
+  attempt=0
+  while true; do
+    if [ -f "$flag" ]; then
+      rm -f "$flag"
+      echo "[persist-dev] stop flag set; not restarting."
+      break
+    fi
     "${cmd[@]}"
-    break
-  fi
-  "${cmd[@]}"
-  code=$?
-  if [ "$code" -eq 0 ] || [ "$code" -eq 130 ] || [ "$code" -eq 143 ]; then
-    echo "[persist-dev] harness exited ($code); not restarting."
-    break
-  fi
-  echo "[persist-dev] harness crashed (code $code); restarting in 3s (touch $flag to stop)..."
-  sleep 3
-done
+    code=$?
+    if [ "$code" -eq 0 ] || [ "$code" -eq 130 ] || [ "$code" -eq 143 ]; then
+      echo "[persist-dev] harness exited ($code); not restarting."
+      break
+    fi
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge "$max_tries" ]; then
+      echo "[persist-dev] harness crashed $attempt times; giving up."
+      break
+    fi
+    echo "[persist-dev] harness crashed (code $code); restarting in ${delay}s (touch $flag to stop)..."
+    sleep "$delay"
+    delay=$(( delay * 2 > 60 ? 60 : delay * 2 ))
+  done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  run_harness "$@"
+fi

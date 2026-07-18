@@ -21,13 +21,17 @@ ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # OpenCode CLI (https://opencode.ai). Version pinned for reproducible builds.
 ARG OPENCODE_VERSION=0.0.55
-RUN curl -fsSL https://opencode.ai/install | bash -s -- --version ${OPENCODE_VERSION} \
-    || echo "opencode install skipped; install manually inside the container"
+RUN curl -fsSL https://opencode.ai/install -o /tmp/oc-install \
+ && bash /tmp/oc-install --version ${OPENCODE_VERSION} \
+ || echo "opencode install skipped; install manually inside the container" \
+ ; rm -f /tmp/oc-install
 
 # Oh My Pi (omp) — https://omp.sh. Ref pinned to a release tag for reproducibility.
 ARG OMP_VERSION=v17.0.4
-RUN curl -fsSL https://omp.sh/install | sh -s -- --ref ${OMP_VERSION} \
-    || echo "omp install skipped; install manually inside the container"
+RUN curl -fsSL https://omp.sh/install -o /tmp/omp-install \
+ && sh /tmp/omp-install --ref ${OMP_VERSION} \
+ || echo "omp install skipped; install manually inside the container" \
+ ; rm -f /tmp/omp-install
 
 # Claude Code + OpenAI Codex (best-effort; build still succeeds if offline).
 # Versions pinned for reproducible builds.
@@ -44,7 +48,7 @@ RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entryp
     && mkdir -p /var/run/sshd /workspace /workspace/projects /home/dev \
     && useradd -m -s /bin/bash dev \
     && echo 'dev:dev' | chpasswd \
-    && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev
+    && echo 'dev ALL=(ALL) ALL' > /etc/sudoers.d/dev   # password required, not passwordless root
 
 EXPOSE 22
 EXPOSE 60000-61000/udp
