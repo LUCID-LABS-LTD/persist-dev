@@ -120,6 +120,40 @@ secure_server() {
   fi
 }
 
+# Make sure a cron daemon is installed and running (per distro).
+ensure_cron() {
+  detect_pkg
+  command -v crontab >/dev/null 2>&1 || {
+    echo "== installing cron =="
+    case "$PKG" in
+      apt|zypper) pkg_install cron ;;
+      dnf|yum|pacman) pkg_install cronie ;;
+      apk) pkg_install cron ;;
+      *) echo "Unsupported distro — install a cron daemon manually"; exit 1 ;;
+    esac
+  }
+  start_cron
+}
+
+# Best-effort: enable + start the cron service under systemd or OpenRC.
+start_cron() {
+  if [ -d /run/systemd/system ]; then
+    local unit
+    case "$PKG" in
+      apt|zypper) unit=cron ;;
+      dnf|yum|pacman) unit=cronie ;;
+      apk) unit=crond ;;
+      *) unit=cron ;;
+    esac
+    $SUDO systemctl enable --now "$unit" >/dev/null 2>&1 || true
+  elif command -v rc-service >/dev/null 2>&1; then
+    $SUDO rc-update add crond default >/dev/null 2>&1 || true
+    $SUDO rc-service crond start >/dev/null 2>&1 || true
+  else
+    $SUDO service cron start >/dev/null 2>&1 || $SUDO service crond start >/dev/null 2>&1 || true
+  fi
+}
+
 install_cron() {
   local target="${BACKUP_TARGET:-}"
   if [ -z "$target" ]; then
@@ -127,6 +161,7 @@ install_cron() {
     echo "  export BACKUP_TARGET='myserver:/backups/persist'"
     exit 1
   fi
+  ensure_cron
   local log="$DATA_DIR/../backup-cron.log"
   local line="0 */6 * * *  BACKUP_TARGET='$target' podman exec '$CONTAINER' dev backup >> '$log' 2>&1"
   ( crontab -l 2>/dev/null | grep -v "persist-dev backup"; echo "$line" ) | crontab - || true
