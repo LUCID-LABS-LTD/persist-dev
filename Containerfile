@@ -24,6 +24,8 @@ ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 ARG OPENCODE_VERSION=1.18.4
 RUN curl -fsSL https://opencode.ai/install -o /tmp/oc-install \
  && bash /tmp/oc-install --version ${OPENCODE_VERSION} \
+ && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
+ && rm -rf /root/.opencode \
  || echo "opencode install skipped; install manually inside the container" \
  ; rm -f /tmp/oc-install
 
