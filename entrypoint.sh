@@ -13,6 +13,10 @@ set -euo pipefail
 # Ensure default UTF-8 locale environment for all SSH sessions
 echo "LANG=C.UTF-8" > /etc/environment
 echo "LC_ALL=C.UTF-8" >> /etc/environment
+# Save container's mapped mosh port range for mosh-server wrapper
+mosh_range="${MOSH_PORT_RANGE:-60000-60050}"
+echo "${mosh_range//-/:}" > /etc/mosh_ports
+chmod 644 /etc/mosh_ports
 
 if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
   ssh-keygen -A

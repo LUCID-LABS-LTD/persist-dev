@@ -12,7 +12,11 @@ for arg in "$@"; do
 done
 
 if [ "$has_port" = "false" ]; then
-  range="${MOSH_PORT_RANGE:-60000:60050}"
+  range="${MOSH_PORT_RANGE:-}"
+  if [ -z "$range" ] && [ -f /etc/mosh_ports ]; then
+    range=$(cat /etc/mosh_ports 2>/dev/null || echo "60000:60050")
+  fi
+  range="${range:-60000:60050}"
   range="${range//-/:}"
   exec /usr/bin/mosh-server "$@" -p "$range"
 else
