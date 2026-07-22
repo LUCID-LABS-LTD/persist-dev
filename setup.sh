@@ -136,6 +136,7 @@ run_container() {
   podman run -d --name "$CONTAINER" \
       -p "$PORT_SSH:22" \
       -p "$mosh_ports:$mosh_ports/udp" \
+      -e "MOSH_PORT_RANGE=$mosh_ports" \
       -v "$DATA_DIR:/workspace" \
       -v "$DATA_DIR/.config:/home/dev/.config" \
       -v "$DATA_DIR/.codex:/home/dev/.codex" \
