@@ -228,7 +228,7 @@ cmd_log() {
 cmd_doctor() {
   echo "persist-dev doctor"
   echo "--- tmux server ---"
-  if tmux info >/dev/null 2>&1; then echo "  [ok] tmux server running"; else echo "  [FAIL] tmux server not running"; fi
+  if tmux ls >/dev/null 2>&1 || pgrep -u "$(id -u)" tmux >/dev/null 2>&1 || [ -S "/tmp/tmux-$(id -u)/default" ]; then echo "  [ok] tmux server running"; else echo "  [FAIL] tmux server not running"; fi
   echo "--- volume /workspace ---"
   if [ -w /workspace ]; then echo "  [ok] /workspace writable"; else echo "  [FAIL] /workspace not writable"; fi
   echo "--- configured harnesses ---"
