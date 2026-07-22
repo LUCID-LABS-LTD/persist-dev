@@ -11,6 +11,7 @@
 #   DATA_DIR=~/.persist/workspace   host dir mounted at container /workspace
 #   BACKUP_TARGET=...      rsync/rclone target used by `dev backup` and --cron
 #   PERSIST_MEM / PERSIST_CPUS   podman --memory / --cpus limits (e.g. 4g / 2.0)
+#   MOSH_PORT_RANGE=60000-60050  UDP port range for mosh (defaults to 60000-60050)
 set -euo pipefail
 
 IMAGE="ghcr.io/LUCID-LABS-LTD/persist-dev:latest"
@@ -19,6 +20,7 @@ PORT_SSH="${PORT_SSH:-2222}"
 DATA_DIR="${DATA_DIR:-$HOME/.persist/workspace}"
 PODMAN_MEM="${PERSIST_MEM:-}"
 PODMAN_CPUS="${PERSIST_CPUS:-}"
+MOSH_PORT_RANGE="${MOSH_PORT_RANGE:-60000-60050}"
 SECURE=false
 CRON=false
 CRON_REMOVE=false
@@ -83,18 +85,23 @@ ensure_mosh() {
     || echo "  [warn] could not auto-install mosh-server. Install 'mosh' in the container manually; mosh connections will fail without it."
 }
 
-# Check whether any UDP port in 60000-61000 is already bound on the host.
-# mosh-server needs a free port in this range; a stale container or another
-# listener will cause 'address already in use' at container start.
+# Check whether any UDP port in MOSH_PORT_RANGE (60000-60050) is bound on the host.
 check_mosh_ports() {
+  local ports="${MOSH_PORT_RANGE:-60000-60050}"
   if command -v ss >/dev/null 2>&1; then
-    if ss -lun 2>/dev/null | awk '{print $5}' | grep -qE ':(60[0-9]{3}|61000)'; then
-      echo "  [warn] UDP ports 60000-61000 appear in use; mosh may fail."
-      echo "  Stop the stale container or conflicting listener, then re-run."
-    fi
+    local bound
+    bound=$(ss -a -u -n 2>/dev/null || true)
+    local s="${ports%%-*}"
+    local e="${ports##*-}"
+    for p in $(seq "$s" "$e" 2>/dev/null || echo "$s"); do
+      if echo "$bound" | grep -qE ":$p([[:space:]]|$)"; then
+        echo "  [warn] UDP port $p in range $ports appears in use on host."
+        echo "  Free port $p or set MOSH_PORT_RANGE=<start:end> (note: if you change this range, pass -p <port> to your mosh client)."
+        break
+      fi
+    done
   fi
 }
-
 pull_or_build() {
   if podman pull "$IMAGE" 2>/dev/null; then
     echo "== pulled prebuilt image =="
@@ -107,21 +114,28 @@ pull_or_build() {
 
 run_container() {
   check_mosh_ports
+  local mosh_ports="${MOSH_PORT_RANGE:-60000-60050}"
   local extra=()
   [ -n "$PODMAN_MEM" ]  && extra+=(--memory "$PODMAN_MEM")
   [ -n "$PODMAN_CPUS" ] && extra+=(--cpus "$PODMAN_CPUS")
   if podman ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
-    podman start "$CONTAINER" >/dev/null
-    echo "== restarted existing container =="
-  else
-    mkdir -p "$DATA_DIR"/.config "$DATA_DIR"/.codex "$DATA_DIR"/.gemini "$DATA_DIR"/.omp
+    if podman start "$CONTAINER" >/dev/null 2>&1; then
+      echo "== restarted existing container =="
+      ensure_mosh
+      return 0
+    fi
+    echo "== container failed to start (stale port spec?); recreating... =="
+    podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  fi
+
+  mkdir -p "$DATA_DIR"/.config "$DATA_DIR"/.codex "$DATA_DIR"/.gemini "$DATA_DIR"/.omp
   # Bind-mount the whole volume at /workspace AND its agent-config subdirs onto
   # the dev home. The subdir mounts are nested inside $DATA_DIR on purpose:
   # /workspace/.config etc. resolve to the very volume paths mounted at
   # /home/dev/.config, so config persists without symlinks.
   podman run -d --name "$CONTAINER" \
       -p "$PORT_SSH:22" \
-      -p 60000-61000:60000-61000/udp \
+      -p "$mosh_ports:$mosh_ports/udp" \
       -v "$DATA_DIR:/workspace" \
       -v "$DATA_DIR/.config:/home/dev/.config" \
       -v "$DATA_DIR/.codex:/home/dev/.codex" \
@@ -130,8 +144,7 @@ run_container() {
       --restart unless-stopped \
       "${extra[@]}" \
       "$IMAGE"
-    echo "== started container =="
-  fi
+  echo "== started container (mosh ports: $mosh_ports/udp) =="
   ensure_mosh
 }
 
