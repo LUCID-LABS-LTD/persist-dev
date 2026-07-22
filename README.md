@@ -223,9 +223,3 @@ tasks below) — it's written so another agent can clone the repo and pick up wh
 - **T5** — ✅ `dev doctor`, `dev rename`, `dev attach` auto-creates, `dev log`.
 - **T6** — ✅ Per-harness auth table + troubleshooting (see above).
 - **T7** — ✅ `./setup.sh --cron` schedules `dev backup` every 6h (needs `BACKUP_TARGET`).
-
-**Requirement #1 (resolved):** the original voice spec was cut off by STT at
-"important information needs to be ___". Imbol confirmed it: **sync agent context across
-sessions**. Implemented as `dev ctx` — a shared context store on the volume (visible to every
-session, included in `dev backup`, and `dev ctx sync`/`pull` moves it to `BACKUP_TARGET` for
-cross-machine continuity).
