@@ -47,8 +47,10 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY mosh-server-wrapper /usr/local/bin/mosh-server
 COPY config/tmux.conf /etc/tmux.conf
 COPY config/sshd_config /etc/ssh/sshd_config
-
 RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server \
+    && mv /usr/bin/mosh-server /usr/bin/mosh-server.real \
+    && cp /usr/local/bin/mosh-server /usr/bin/mosh-server \
+    && chmod +x /usr/bin/mosh-server /usr/bin/mosh-server.real \
     && mkdir -p /var/run/sshd /workspace /workspace/projects /home/dev \
     && useradd -m -s /bin/bash dev \
     && echo 'dev:dev' | chpasswd \

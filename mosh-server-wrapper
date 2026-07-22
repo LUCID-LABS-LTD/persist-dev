@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# /usr/local/bin/mosh-server: wrapper to force mosh-server to bind within
+# /usr/bin/mosh-server wrapper: forces mosh-server to bind within
 # the container's mapped UDP port range (default 60000:60050).
 export LANG="${LANG:-C.UTF-8}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
@@ -11,6 +11,9 @@ for arg in "$@"; do
   esac
 done
 
+REAL_BIN="/usr/bin/mosh-server.real"
+[ -f "$REAL_BIN" ] || REAL_BIN="/usr/bin/mosh-server"
+
 if [ "$has_port" = "false" ]; then
   range="${MOSH_PORT_RANGE:-}"
   if [ -z "$range" ] && [ -f /etc/mosh_ports ]; then
@@ -18,7 +21,7 @@ if [ "$has_port" = "false" ]; then
   fi
   range="${range:-60000:60050}"
   range="${range//-/:}"
-  exec /usr/bin/mosh-server "$@" -p "$range"
+  exec "$REAL_BIN" "$@" -p "$range"
 else
-  exec /usr/bin/mosh-server "$@"
+  exec "$REAL_BIN" "$@"
 fi
