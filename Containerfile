@@ -16,13 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     unzip \
     && rm -rf /var/lib/apt/lists/*
-RUN install -d /usr/local/bun && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local/bun bash && ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun || echo "bun install skipped"
 
 RUN sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 # OpenCode CLI (https://opencode.ai). Version pinned for reproducible builds.
-ARG OPENCODE_VERSION=0.0.55
+ARG OPENCODE_VERSION=1.18.4
 RUN curl -fsSL https://opencode.ai/install -o /tmp/oc-install \
  && bash /tmp/oc-install --version ${OPENCODE_VERSION} \
  || echo "opencode install skipped; install manually inside the container" \
@@ -31,7 +30,7 @@ RUN curl -fsSL https://opencode.ai/install -o /tmp/oc-install \
 # Oh My Pi (omp) — https://omp.sh. Ref pinned to a release tag for reproducibility.
 ARG OMP_VERSION=v17.0.4
 RUN curl -fsSL https://omp.sh/install -o /tmp/omp-install \
- && sh /tmp/omp-install --ref ${OMP_VERSION} \
+ && PI_INSTALL_DIR=/usr/local/bin sh /tmp/omp-install --binary --ref ${OMP_VERSION} \
  || echo "omp install skipped; install manually inside the container" \
  ; rm -f /tmp/omp-install
 

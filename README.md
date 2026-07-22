@@ -218,7 +218,7 @@ tasks below) — it's written so another agent can clone the repo and pick up wh
 
 - **T1** — ✅ Prebuilt image published via GitHub Actions → `ghcr.io/lucid-labs-ltd/persist-dev` (`.github/workflows/build.yml`, builds on push to `main`).
 - **T2** — ✅ Auto-restart a crashed harness: `dev new`/`dev run` launch via `dev-harness`, which restarts the agent on crash (clean quit / Ctrl-C does not restart).
-- **T3** — ✅ Installer versions pinned (opencode `0.0.55`, omp `v17.0.4`, claude-code `2.1.214`, codex `0.144.5`).
+- **T3** — ✅ Installer versions pinned (opencode `1.18.4`, omp `v17.0.4`, claude-code `2.1.214`, codex `0.144.5`).
 - **T4** — ✅ Security: `./setup.sh --secure` forces a new `dev` password and can switch to key-only SSH; port 2222 is Tailscale-only; optional podman `--memory`/`--cpus` via `PERSIST_MEM`/`PERSIST_CPUS`.
 - **T5** — ✅ `dev doctor`, `dev rename`, `dev attach` auto-creates, `dev log`.
 - **T6** — ✅ Per-harness auth table + troubleshooting (see above).
