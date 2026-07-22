@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nodejs \
     npm \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mv /usr/bin/mosh-server /usr/bin/mosh-server.real
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 RUN echo "LANG=C.UTF-8" > /etc/default/locale && echo "LC_ALL=C.UTF-8" >> /etc/default/locale
@@ -45,12 +46,10 @@ COPY dev /usr/local/bin/dev
 COPY dev-harness /usr/local/bin/dev-harness
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY mosh-server-wrapper /usr/local/bin/mosh-server
+COPY mosh-server-wrapper /usr/bin/mosh-server
 COPY config/tmux.conf /etc/tmux.conf
 COPY config/sshd_config /etc/ssh/sshd_config
-RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server \
-    && mv /usr/bin/mosh-server /usr/bin/mosh-server.real \
-    && cp /usr/local/bin/mosh-server /usr/bin/mosh-server \
-    && chmod +x /usr/bin/mosh-server /usr/bin/mosh-server.real \
+RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server /usr/bin/mosh-server /usr/bin/mosh-server.real \
     && mkdir -p /var/run/sshd /workspace /workspace/projects /home/dev \
     && useradd -m -s /bin/bash dev \
     && echo 'dev:dev' | chpasswd \
