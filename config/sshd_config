@@ -2,6 +2,7 @@
 Port 22
 AddressFamily any
 ListenAddress 0.0.0.0
+UseDNS no
 
 PermitRootLogin no
 PasswordAuthentication yes
@@ -17,3 +18,4 @@ Subsystem sftp internal-sftp
 
 ClientAliveInterval 60
 ClientAliveCountMax 3
+MaxStartups 10:30:60

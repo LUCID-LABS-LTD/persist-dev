@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     nodejs \
     npm \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+RUN install -d /usr/local/bun && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local/bun bash && ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun || echo "bun install skipped"
 
 RUN sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8

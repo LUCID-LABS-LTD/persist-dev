@@ -13,6 +13,7 @@ set -euo pipefail
 if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
   ssh-keygen -A
 fi
+sshd -t || { echo 'sshd config invalid; not starting' >&2; exit 1; }
 
 mkdir -p /var/run/sshd /workspace/projects
 
@@ -21,7 +22,9 @@ mkdir -p /var/run/sshd /workspace/projects
 for d in /workspace/.config /workspace/.codex /workspace/.gemini /workspace/.omp; do
   mkdir -p "$d"
 done
-chown -R dev:dev /workspace/.config /workspace/.codex /workspace/.gemini /workspace/.omp /workspace/projects 2>/dev/null || true
+for d in /workspace/.config /workspace/.codex /workspace/.gemini /workspace/.omp /workspace/projects; do
+  [ -d "$d" ] && chown -R dev:dev "$d" 2>/dev/null || true
+done
 
 # Start sshd.
 /usr/sbin/sshd
