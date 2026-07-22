@@ -41,9 +41,7 @@ sudo ./setup.sh
 ```
 
 `setup.sh` installs Podman + Tailscale if missing, pulls the prebuilt image, runs the container,
-and prints your connect command. (First-time package installs dominate the clock; the
-clone→run path is instant if Podman + Tailscale are already present.)
-
+and prints your connect command. (Optional environment flags: `PORT_SSH=2222`, `MOSH_PORT_RANGE=60000-60050`, `PERSIST_MEM`, `PERSIST_CPUS`).
 **Headless server?** `tailscale up` normally opens a browser login. On a box with no browser,
 set `TS_AUTHKEY` to a key from *tailscale.com → Settings → Keys* and run
 `TS_AUTHKEY=tskey-xxxxx sudo ./setup.sh` — the script joins the tailnet for you, no browser needed.
@@ -191,7 +189,7 @@ The prebuilt image is published to `ghcr.io/lucid-labs-ltd/persist-dev`. To buil
         v
    Tailscale tunnel  <--->  always-on server
         |                      |
-   port 2222 / UDP 60000-61000 |
+   port 2222 / UDP 60000-60050 |
         v                      v
    ┌───────────────────────────────────┐
    | container: persist-dev             |
