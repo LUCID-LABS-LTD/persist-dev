@@ -10,15 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     fzf \
-    locales \
+    locales-all \
     sudo \
     nodejs \
     npm \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
-ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+RUN echo "LANG=C.UTF-8" > /etc/default/locale && echo "LC_ALL=C.UTF-8" >> /etc/default/locale
 
 # OpenCode CLI (https://opencode.ai). Version pinned for reproducible builds.
 ARG OPENCODE_VERSION=1.18.4

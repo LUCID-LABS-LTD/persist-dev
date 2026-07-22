@@ -10,6 +10,10 @@
 # of truth; the home paths are just mount points.
 set -euo pipefail
 
+# Ensure default UTF-8 locale environment for all SSH sessions
+echo "LANG=C.UTF-8" > /etc/environment
+echo "LC_ALL=C.UTF-8" >> /etc/environment
+
 if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
   ssh-keygen -A
 fi
