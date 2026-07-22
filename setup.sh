@@ -76,10 +76,23 @@ ensure_mosh() {
     echo "  mosh-server present in container."
     return 0
   fi
-  echo "  mosh-server missing in container; installing (apt)..."
+  echo "  mosh-server missing in container; installing..."
+  # The container is debian-based, so apt is the right manager here.
   podman exec "$CONTAINER" bash -c \
     "apt-get update -y >/dev/null 2>&1; apt-get install -y mosh" \
     || echo "  [warn] could not auto-install mosh-server. Install 'mosh' in the container manually; mosh connections will fail without it."
+}
+
+# Check whether any UDP port in 60000-61000 is already bound on the host.
+# mosh-server needs a free port in this range; a stale container or another
+# listener will cause 'address already in use' at container start.
+check_mosh_ports() {
+  if command -v ss >/dev/null 2>&1; then
+    if ss -lun 2>/dev/null | awk '{print $5}' | grep -qE ':(60[0-9]{3}|61000)'; then
+      echo "  [warn] UDP ports 60000-61000 appear in use; mosh may fail."
+      echo "  Stop the stale container or conflicting listener, then re-run."
+    fi
+  fi
 }
 
 pull_or_build() {
@@ -93,6 +106,7 @@ pull_or_build() {
 }
 
 run_container() {
+  check_mosh_ports
   local extra=()
   [ -n "$PODMAN_MEM" ]  && extra+=(--memory "$PODMAN_MEM")
   [ -n "$PODMAN_CPUS" ] && extra+=(--cpus "$PODMAN_CPUS")
