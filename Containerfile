@@ -44,10 +44,11 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.214 @openai/codex@0.144.5 2>/de
 COPY dev /usr/local/bin/dev
 COPY dev-harness /usr/local/bin/dev-harness
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY mosh-server-wrapper /usr/local/bin/mosh-server
 COPY config/tmux.conf /etc/tmux.conf
 COPY config/sshd_config /etc/ssh/sshd_config
 
-RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh \
+RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server \
     && mkdir -p /var/run/sshd /workspace /workspace/projects /home/dev \
     && useradd -m -s /bin/bash dev \
     && echo 'dev:dev' | chpasswd \

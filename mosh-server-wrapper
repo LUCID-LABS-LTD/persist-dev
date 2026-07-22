@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# /usr/local/bin/mosh-server: wrapper to force mosh-server to bind within
+# the container's mapped UDP port range (default 60000:60050).
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+
+has_port=false
+for arg in "$@"; do
+  case "$arg" in
+    -p|--port|--port=*) has_port=true; break ;;
+  esac
+done
+
+if [ "$has_port" = "false" ]; then
+  range="${MOSH_PORT_RANGE:-60000:60050}"
+  range="${range//-/:}"
+  exec /usr/bin/mosh-server "$@" -p "$range"
+else
+  exec /usr/bin/mosh-server "$@"
+fi
