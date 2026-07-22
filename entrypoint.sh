@@ -22,6 +22,7 @@ mkdir -p /var/run/sshd /workspace/projects
 for d in /workspace/.config /workspace/.codex /workspace/.gemini /workspace/.omp; do
   mkdir -p "$d"
 done
+chown dev:dev /workspace 2>/dev/null || true
 for d in /workspace/.config /workspace/.codex /workspace/.gemini /workspace/.omp /workspace/projects; do
   [ -d "$d" ] && chown -R dev:dev "$d" 2>/dev/null || true
 done
@@ -31,7 +32,7 @@ done
 
 # Ensure a tmux server exists for the dev user so project sessions persist
 # independently of any SSH/mosh viewer.
-su - dev -c 'tmux start-server 2>/dev/null || true'
+su - dev -c 'tmux new-session -d -s main 2>/dev/null || true'
 
 # Keep the container alive.
 exec tail -f /dev/null
