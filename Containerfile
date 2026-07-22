@@ -54,7 +54,7 @@ RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entryp
     && echo 'dev ALL=(ALL) ALL' > /etc/sudoers.d/dev   # password required, not passwordless root
 
 EXPOSE 22
-EXPOSE 60000-61000/udp
+EXPOSE 60000-60050/udp
 VOLUME ["/workspace"]
 WORKDIR /workspace
 
