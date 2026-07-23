@@ -204,8 +204,8 @@ cmd_run() {
   if ! tmux has-session -t "$sess" 2>/dev/null; then
     mkdir -p "$PROJECTS_DIR/$name"
     tmux new-session -d -s "$sess" -c "$PROJECTS_DIR/$name"
-    echo "$harness" > "$META_DIR/$name.harness"
   fi
+echo "$harness" > "$META_DIR/$name.harness"
   rm -f "$META_DIR/$name.norestart"
   tmux send-keys -t "$sess" "dev-harness $name $hcmd" C-m
   echo "Launched harness '$harness' in project '$name'. Attach with: dev attach $name"
