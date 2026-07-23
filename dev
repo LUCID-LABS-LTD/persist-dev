@@ -184,7 +184,6 @@ cmd_attach() {
       fi
       echo "Creating project '$name'..."
       cmd_new "$name"
-      return 0
     fi
   fi
   exec tmux attach -t "$sess"
