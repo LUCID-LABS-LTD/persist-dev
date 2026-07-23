@@ -405,12 +405,14 @@ cmd_ctx() {
     sync)
       local target="${BACKUP_TARGET:-}"
       [ -z "$target" ] && { echo "[persist-dev] Set BACKUP_TARGET to sync context." >&2; exit 1; }
+      command -v rsync >/dev/null 2>&1 || { echo "[persist-dev] rsync is required but not installed." >&2; exit 1; }
       rsync -az "$CTX_DIR/" "$target/context/"
       echo "Synced context -> $target/context/"
       ;;
     pull)
       local target="${BACKUP_TARGET:-}"
       [ -z "$target" ] && { echo "[persist-dev] Set BACKUP_TARGET to pull context." >&2; exit 1; }
+      command -v rsync >/dev/null 2>&1 || { echo "[persist-dev] rsync is required but not installed." >&2; exit 1; }
       rsync -az "$target/context/" "$CTX_DIR/"
       echo "Pulled context <- $target/context/"
       ;;
