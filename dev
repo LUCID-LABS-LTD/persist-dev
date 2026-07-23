@@ -160,7 +160,7 @@ cmd_new() {
   fi
   mkdir -p "$dir"
   if [ -n "$git_url" ]; then
-    if git clone "$git_url" "$dir" 2>/dev/null; then
+    if git clone "$git_url" "$dir"; then
       echo "Cloned $git_url -> $dir"
     else
       echo "[persist-dev] Clone failed; empty project created at $dir" >&2
