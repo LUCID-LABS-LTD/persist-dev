@@ -184,7 +184,7 @@ secure_server() {
     pw=$(head -c 12 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-16)
     echo "  (blank entered) generated random password: $pw"
   fi
-  podman exec "$CONTAINER" sh -c "echo 'dev:$(printf '%q' "$pw")' | chpasswd"
+  printf 'dev:%s\n' "$pw" | podman exec -i "$CONTAINER" chpasswd
   echo "  password set. Save it now — it will not be shown again."
   echo
   echo "For key-only access (recommended):"
