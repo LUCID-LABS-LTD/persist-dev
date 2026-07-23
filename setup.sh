@@ -247,12 +247,12 @@ install_cron() {
   ensure_cron
   local log="$DATA_DIR/../backup-cron.log"
   local line="0 */6 * * *  BACKUP_TARGET='$target' podman exec '$CONTAINER' dev backup >> '$log' 2>&1"
-  ( crontab -l 2>/dev/null | grep -v "persist-dev backup"; echo "$line" ) | crontab - || true
+  ( crontab -l 2>/dev/null | grep -v "persist-dev.*backup"; echo "$line" ) | crontab - || true
   echo -e "${BOLD}${CYAN}== scheduled backup: $line ==${RESET}"
 }
 
 remove_cron() {
-  ( crontab -l 2>/dev/null | grep -v "persist-dev backup" ) | crontab - || true
+  ( crontab -l 2>/dev/null | grep -v "persist-dev.*backup" ) | crontab - || true
   echo -e "${BOLD}${CYAN}== removed persist-dev backup cron entry ==${RESET}"
 }
 
