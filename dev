@@ -474,13 +474,20 @@ cmd_harness_add() {
     echo "[persist-dev] missing launch command" >&2
     exit 1
   fi
+  # Validate harness name against what load_config can parse.
+  # Must match ^([A-Za-z0-9_-]+)$ — same charset as the config parser.
+  if [[ ! "$name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "[persist-dev] invalid harness name '$name' (allowed: A-Za-z0-9 _ -; no dots)" >&2
+    exit 1
+  fi
 
   local bin="${cmd%% *}"
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "[persist-dev] Harness binary '$bin' is not in PATH. Remember to install it before running." >&2
   fi
 
-  grep -v "^${name}=" "$CONFIG" > "$CONFIG.tmp" 2>/dev/null || true
+  local escaped_name="${name//./\\.}"  # only . is regex-special in the allowed charset
+  grep -v "^${escaped_name}=" "$CONFIG" > "$CONFIG.tmp" 2>/dev/null || true
   mv "$CONFIG.tmp" "$CONFIG"
   echo "${name}=${cmd}" >> "$CONFIG"
   echo "Added harness '$name' -> '$cmd'"
