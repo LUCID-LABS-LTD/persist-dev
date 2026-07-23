@@ -170,7 +170,7 @@ cmd_new() {
   local sess="${TMUX_PREFIX}${name}"
   if tmux has-session -t "$sess" 2>/dev/null; then
     echo "Session $sess already running"
-    tmux attach -t "$sess"
+    tmux attach -t "$sess" || true
     return 0
   fi
   tmux new-session -d -s "$sess" -c "$dir"
@@ -210,7 +210,7 @@ cmd_attach() {
       cmd_new "$name"
     fi
   fi
-  tmux attach -t "$sess"
+  tmux attach -t "$sess" || true
 }
 
 cmd_run() {
@@ -400,7 +400,7 @@ cmd_ctx() {
         echo "[persist-dev] No text editor found. Install one (e.g. 'sudo apt-get install nano') or set EDITOR." >&2
         return 1
       fi
-      $ed "$f"
+      $ed "$f" || true
       ;;
     sync)
       local target="${BACKUP_TARGET:-}"
