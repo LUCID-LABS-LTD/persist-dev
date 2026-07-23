@@ -222,11 +222,10 @@ cmd_run() {
   local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
   check_harness_bin "$hcmd" || true
   local sess="${TMUX_PREFIX}${name}"
-  if ! tmux has-session -t "$sess" 2>/dev/null; then
-    mkdir -p "$PROJECTS_DIR/$name"
-    tmux new-session -d -s "$sess" -c "$PROJECTS_DIR/$name"
-  fi
-echo "$harness" > "$META_DIR/$name.harness"
+  tmux kill-session -t "$sess" 2>/dev/null || true
+  mkdir -p "$PROJECTS_DIR/$name"
+  tmux new-session -d -s "$sess" -c "$PROJECTS_DIR/$name"
+  echo "$harness" > "$META_DIR/$name.harness"
   rm -f "$META_DIR/$name.norestart"
   tmux send-keys -t "$sess" "dev-harness $name $hcmd" C-m
   echo "Launched harness '$harness' in project '$name'. Attach with: dev attach $name"
