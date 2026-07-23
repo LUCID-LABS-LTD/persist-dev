@@ -151,7 +151,8 @@ cmd_new() {
   local sess="${TMUX_PREFIX}${name}"
   if tmux has-session -t "$sess" 2>/dev/null; then
     echo "Session $sess already running"
-    exec tmux attach -t "$sess"
+    tmux attach -t "$sess"
+    return 0
   fi
   tmux new-session -d -s "$sess" -c "$dir"
   echo "$harness" > "$META_DIR/$name.harness"
@@ -187,7 +188,7 @@ cmd_attach() {
       cmd_new "$name"
     fi
   fi
-  exec tmux attach -t "$sess"
+  tmux attach -t "$sess"
 }
 
 cmd_run() {
