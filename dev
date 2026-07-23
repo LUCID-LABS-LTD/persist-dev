@@ -73,6 +73,21 @@ harness_resolve() {
   echo "${HARNESS_CMD[$name]}"
 }
 
+# Check whether the binary for a resolved harness command is available in PATH.
+# Prints a warning if missing — dev-harness will loop "harness crashed (code 127)"
+# without this pre-flight check.
+check_harness_bin() {
+  local hcmd="$1"
+  local hbin="${hcmd%% *}"
+  if ! command -v "$hbin" >/dev/null 2>&1; then
+    echo "[persist-dev] Warning: harness binary '$hbin' is not installed." >&2
+    echo "[persist-dev] The harness will fail to start (restart loop)." >&2
+    echo "[persist-dev] Install '$hbin' or use a different harness." >&2
+    return 1
+  fi
+  return 0
+}
+
 # Reject project names that could escape the projects dir or break tmux/shell.
 # Allowed chars: A-Za-z0-9 _ . -  (no '/', no "..", no spaces).
 valid_name() {
@@ -117,6 +132,7 @@ cmd_ls() {
   done <<< "$projects"
 }
 
+
 cmd_new() {
   local name="" git_url="" harness=""
   while [[ $# -gt 0 ]]; do
@@ -131,6 +147,9 @@ cmd_new() {
   valid_name "$name" || exit 1
   harness="${harness:-$DEFAULT_HARNESS}"
   local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
+  # Warn if the harness binary is missing — avoids a confusing restart loop
+  # inside dev-harness when command -v returns 127.
+  check_harness_bin "$hcmd" || true
 
   mkdir -p "$PROJECTS_DIR"
   local dir="$PROJECTS_DIR/$name"
@@ -174,6 +193,7 @@ cmd_attach() {
       [ -f "$META_DIR/$name.harness" ] && harness="$(cat "$META_DIR/$name.harness")"
       [ -z "$harness" ] && harness="$DEFAULT_HARNESS"
       local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
+      check_harness_bin "$hcmd" || true
       tmux new-session -d -s "$sess" -c "$dir"
       echo "$harness" > "$META_DIR/$name.harness"
       rm -f "$META_DIR/$name.norestart"
@@ -200,6 +220,7 @@ cmd_run() {
   [ -z "$harness" ] && [ -f "$META_DIR/$name.harness" ] && harness="$(cat "$META_DIR/$name.harness")"
   [ -z "$harness" ] && harness="$DEFAULT_HARNESS"
   local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
+  check_harness_bin "$hcmd" || true
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
     mkdir -p "$PROJECTS_DIR/$name"
