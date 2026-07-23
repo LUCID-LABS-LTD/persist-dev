@@ -370,7 +370,13 @@ cmd_ctx() {
       local f="$CTX_DIR/${clean_name}.md"
       [ -f "$f" ] || printf '# Context: %s\n\n' "$clean_name" > "$f"
       local ed="${EDITOR:-}"
-      [ -z "$ed" ] && ed="$(command -v nano 2>/dev/null || command -v vim 2>/dev/null || echo vi)"
+      if [ -z "$ed" ]; then
+        ed="$(command -v nano 2>/dev/null || command -v vim 2>/dev/null || command -v vi 2>/dev/null || true)"
+      fi
+      if [ -z "$ed" ]; then
+        echo "[persist-dev] No text editor found. Install one (e.g. 'sudo apt-get install nano') or set EDITOR." >&2
+        return 1
+      fi
       $ed "$f"
       ;;
     sync)

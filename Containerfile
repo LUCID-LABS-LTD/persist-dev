@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     fzf \
+    nano \
     locales-all \
     sudo \
     nodejs \
