@@ -49,13 +49,13 @@ detect_pkg() {
 pkg_install() {
   detect_pkg
   case "$PKG" in
-    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || echo -e "  ${YELLOW}[warn]${RESET} apt update failed; install may use stale indexes"; $SUDO apt-get install -y "$@" ;;
+    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || echo -e "  ${YELLOW}[warn]${RESET} [persist-dev] apt update failed; install may use stale indexes" >&2; $SUDO apt-get install -y "$@" ;;
     dnf)    $SUDO dnf install -y "$@" ;;
     yum)    $SUDO yum install -y "$@" ;;
     pacman) $SUDO pacman -Sy --noconfirm "$@" ;;
     zypper) $SUDO zypper install -y "$@" ;;
     apk)    $SUDO apk add --no-cache "$@" ;;
-    *) echo -e "${RED}${BOLD}Unsupported package manager — install manually: $*${RESET}"; exit 1 ;;
+    *) echo -e "${RED}${BOLD}[persist-dev] Unsupported package manager — install manually: $*${RESET}" >&2; exit 1 ;;
   esac
 }
 
@@ -89,9 +89,9 @@ ensure_mosh() {
   podman exec "$CONTAINER" bash -c \
     "apt-get update -y >/dev/null 2>&1; apt-get install -y mosh" \
     || {
-      echo -e "  ${YELLOW}[warn]${RESET} could not auto-install mosh-server."
-      echo "  Install 'mosh' in the container manually; mosh connections"
-      echo "  will fail without it."
+      echo -e "  ${YELLOW}[warn]${RESET} [persist-dev] could not auto-install mosh-server." >&2
+      echo "  Install 'mosh' in the container manually; mosh connections" >&2
+      echo "  will fail without it." >&2
     }
 }
 
@@ -105,8 +105,8 @@ check_mosh_ports() {
     local e="${ports##*-}"
     for p in $(seq "$s" "$e" 2>/dev/null || echo "$s"); do
       if echo "$bound" | grep -qE ":$p([[:space:]]|$)"; then
-        echo -e "  ${YELLOW}[warn]${RESET} UDP port $p in range $ports appears in use on host."
-        echo "  Free port $p or set MOSH_PORT_RANGE=<start:end>"
+        echo -e "  ${YELLOW}[warn]${RESET} [persist-dev] UDP port $p in range $ports appears in use on host." >&2
+        echo "  Free port $p or set MOSH_PORT_RANGE=<start:end>" >&2
         echo "  (note: if you change this range, pass -p <port> to your"
         echo "  mosh client)."
         break
@@ -121,8 +121,8 @@ pull_or_build() {
   else
     echo -e "${BOLD}${CYAN}== prebuilt image unavailable; building locally (slower) ==${RESET}"
     if [ ! -f Containerfile ]; then
-      echo -e "${RED}${BOLD}Error: Containerfile not found in current directory ($(pwd)).${RESET}"
-      echo "Please run setup.sh from the cloned persist-dev directory."
+      echo -e "${RED}${BOLD}[persist-dev] Error: Containerfile not found in current directory ($(pwd)).${RESET}" >&2
+      echo "Please run setup.sh from the cloned persist-dev directory." >&2
       exit 1
     fi
     podman build -t persist-dev-local -f Containerfile .
@@ -211,7 +211,7 @@ ensure_cron() {
       apt|zypper) pkg_install cron ;;
       dnf|yum|pacman) pkg_install cronie ;;
       apk) pkg_install cron ;;
-      *) echo -e "${RED}${BOLD}Unsupported distro — install a cron daemon manually${RESET}"; exit 1 ;;
+      *) echo -e "${RED}${BOLD}[persist-dev] Unsupported distro — install a cron daemon manually${RESET}" >&2; exit 1 ;;
     esac
   }
   start_cron
@@ -239,9 +239,9 @@ start_cron() {
 install_cron() {
   local target="${BACKUP_TARGET:-}"
   if [ -z "$target" ]; then
-    echo -e "${RED}${BOLD}Error: BACKUP_TARGET not set; cannot schedule backup.${RESET}"
-    echo "Export it first, e.g.:"
-    echo "  export BACKUP_TARGET='myserver:/backups/persist'"
+    echo -e "${RED}${BOLD}[persist-dev] Error: BACKUP_TARGET not set; cannot schedule backup.${RESET}" >&2
+    echo "Export it first, e.g.:" >&2
+    echo "  export BACKUP_TARGET='myserver:/backups/persist'" >&2
     exit 1
   fi
   ensure_cron
@@ -298,7 +298,7 @@ main() {
       --cron)         CRON=true; shift ;;
       --cron-remove)  CRON_REMOVE=true; shift ;;
       -h|--help)      usage; exit 0 ;;
-      *) echo -e "${RED}${BOLD}unknown flag: $1${RESET}"; usage; exit 1 ;;
+      *) echo -e "${RED}${BOLD}[persist-dev] unknown flag: $1${RESET}" >&2; usage; exit 1 ;;
     esac
   done
   command -v curl >/dev/null 2>&1 || { detect_pkg; pkg_install curl; }

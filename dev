@@ -66,7 +66,7 @@ EOF
 harness_resolve() {
   local name="$1"
   if [ -z "${HARNESS_CMD[$name]:-}" ]; then
-    echo "unknown harness '$name'. Known harnesses:" >&2
+    echo "[persist-dev] unknown harness '$name'. Known harnesses:" >&2
     for k in "${!HARNESS_CMD[@]}"; do echo "  $k" >&2; done
     return 1
   fi
@@ -77,16 +77,16 @@ harness_resolve() {
 # Allowed chars: A-Za-z0-9 _ . -  (no '/', no "..", no spaces).
 valid_name() {
   local n="$1"
-  if [ -z "$n" ]; then echo "project name required" >&2; return 1; fi
+  if [ -z "$n" ]; then echo "[persist-dev] project name required" >&2; return 1; fi
   if [[ "$n" == *" "* ]]; then
     local suggested="${n// /-}"
-    echo "invalid project name '$n' (contains spaces — did you mean '$suggested'?)" >&2; return 1
+    echo "[persist-dev] invalid project name '$n' (contains spaces — did you mean '$suggested'?)" >&2; return 1
   fi
   if [[ "$n" == *"/"* ]] || [[ "$n" == *".."* ]]; then
-    echo "invalid project name '$n' (no '/' or '..' allowed)" >&2; return 1
+    echo "[persist-dev] invalid project name '$n' (no '/' or '..' allowed)" >&2; return 1
   fi
   if [[ ! "$n" =~ ^[A-Za-z0-9_.-]+$ ]]; then
-    echo "invalid project name '$n' (allowed: A-Za-z0-9 _ . -)" >&2; return 1
+    echo "[persist-dev] invalid project name '$n' (allowed: A-Za-z0-9 _ . -)" >&2; return 1
   fi
   return 0
 }
@@ -120,13 +120,13 @@ cmd_new() {
   local name="" git_url="" harness=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --harness)   [ -z "${2:-}" ] && { echo "--harness requires a value" >&2; exit 1; }; harness="$2"; shift 2 ;;
+      --harness)   [ -z "${2:-}" ] && { echo "[persist-dev] --harness requires a value" >&2; exit 1; }; harness="$2"; shift 2 ;;
       --harness=*) harness="${1#*=}"; shift ;;
-      -*) echo "unknown option: $1" >&2; exit 1 ;;
+      -*) echo "[persist-dev] unknown option: $1" >&2; exit 1 ;;
       *) if [ -z "$name" ]; then name="$1"; else git_url="$1"; fi; shift ;;
     esac
   done
-  [ -z "$name" ] && { echo "usage: dev new <name> [git-url] [--harness H]"; exit 1; }
+  [ -z "$name" ] && { echo "[persist-dev] usage: dev new <name> [git-url] [--harness H]" >&2; exit 1; }
   valid_name "$name" || exit 1
   harness="${harness:-$DEFAULT_HARNESS}"
   local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
@@ -134,8 +134,8 @@ cmd_new() {
   mkdir -p "$PROJECTS_DIR"
   local dir="$PROJECTS_DIR/$name"
   if [ -d "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
-    echo "Project $name already exists at $dir"
-    echo "Use 'dev attach $name' to reconnect, or 'dev rm $name' to remove it first."
+    echo "[persist-dev] Project $name already exists at $dir" >&2
+    echo "[persist-dev] Use 'dev attach $name' to reconnect, or 'dev rm $name' to remove it first." >&2
     exit 1
   fi
   mkdir -p "$dir"
@@ -143,10 +143,10 @@ cmd_new() {
     if git clone "$git_url" "$dir" 2>/dev/null; then
       echo "Cloned $git_url -> $dir"
     else
-      echo "Clone failed; empty project created at $dir"
+      echo "[persist-dev] Clone failed; empty project created at $dir" >&2
     fi
   fi
-  command -v tmux >/dev/null 2>&1 || { echo "tmux is required but not installed in the container." >&2; exit 1; }
+  command -v tmux >/dev/null 2>&1 || { echo "[persist-dev] tmux is required but not installed in the container." >&2; exit 1; }
   local sess="${TMUX_PREFIX}${name}"
   if tmux has-session -t "$sess" 2>/dev/null; then
     echo "Session $sess already running"
@@ -160,7 +160,7 @@ cmd_new() {
 }
 
 cmd_attach() {
-  local name="${1:-}"; [ -z "$name" ] && { echo "usage: dev attach <name>" >&2; exit 1; }
+  local name="${1:-}"; [ -z "$name" ] && { echo "[persist-dev] usage: dev attach <name>" >&2; exit 1; }
   valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
@@ -191,7 +191,7 @@ cmd_attach() {
 }
 
 cmd_run() {
-  local name="${1:-}"; [ -z "$name" ] && { echo "usage: dev run <name> [harness]" >&2; exit 1; }; valid_name "$name" || exit 1
+  local name="${1:-}"; [ -z "$name" ] && { echo "[persist-dev] usage: dev run <name> [harness]" >&2; exit 1; }; valid_name "$name" || exit 1
   shift || true
   local harness="${1:-}"
   [ -z "$harness" ] && [ -f "$META_DIR/$name.harness" ] && harness="$(cat "$META_DIR/$name.harness")"
@@ -208,17 +208,17 @@ cmd_run() {
 }
 
 cmd_stop() {
-  local name="${1:-}"; [ -z "$name" ] && { echo "usage: dev stop <name>" >&2; exit 1; }; valid_name "$name" || exit 1
+  local name="${1:-}"; [ -z "$name" ] && { echo "[persist-dev] usage: dev stop <name>" >&2; exit 1; }; valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if tmux kill-session -t "$sess" 2>/dev/null; then
     echo "Stopped $name"
   else
-    echo "Nothing to stop for $name"
+    echo "[persist-dev] Nothing to stop for $name" >&2
   fi
 }
 
 cmd_rm() {
-  local name="${1:-}"; [ -z "$name" ] && { echo "usage: dev rm <name>" >&2; exit 1; }; valid_name "$name" || exit 1
+  local name="${1:-}"; [ -z "$name" ] && { echo "[persist-dev] usage: dev rm <name>" >&2; exit 1; }; valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   tmux kill-session -t "$sess" 2>/dev/null || true
   local dir="$PROJECTS_DIR/$name"
@@ -226,19 +226,19 @@ cmd_rm() {
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     rm -rf "$dir" "$META_DIR/$name.harness" && echo "Removed $name"
   else
-    echo "Kept files."
+    echo "[persist-dev] Kept files." >&2
   fi
 }
 
 cmd_backup() {
   local target="${BACKUP_TARGET:-}"
   if [ -z "$target" ]; then
-    echo "Set BACKUP_TARGET (e.g. user@host:/path or an rclone remote) to enable backup."
-    echo "Example: export BACKUP_TARGET='myserver:/backups/persist' && dev backup"
+    echo "[persist-dev] Set BACKUP_TARGET (e.g. user@host:/path or an rclone remote) to enable backup." >&2
+    echo "[persist-dev] Example: export BACKUP_TARGET='myserver:/backups/persist' && dev backup" >&2
     exit 1
   fi
   echo "Backing up /workspace (projects + agent config) -> $target"
-  command -v rsync >/dev/null 2>&1 || { echo "rsync is required for backup but not installed." >&2; exit 1; }
+  command -v rsync >/dev/null 2>&1 || { echo "[persist-dev] rsync is required for backup but not installed." >&2; exit 1; }
   mkdir -p /workspace
   if [ -n "${BACKUP_PRUNE:-}" ]; then
     echo "  (BACKUP_PRUNE set: mirroring target with --delete)"
@@ -251,19 +251,19 @@ cmd_backup() {
 
 cmd_rename() {
   local old="${1:-}"; local new="${2:-}"
-  [ -z "$old" ] || [ -z "$new" ] && { echo "usage: dev rename <old> <new>" >&2; exit 1; }
+  [ -z "$old" ] || [ -z "$new" ] && { echo "[persist-dev] usage: dev rename <old> <new>" >&2; exit 1; }
   valid_name "$old" || exit 1; valid_name "$new" || exit 1
-  [ "$old" = "$new" ] && { echo "names are the same" >&2; exit 1; }
+  [ "$old" = "$new" ] && { echo "[persist-dev] names are the same" >&2; exit 1; }
   local osess="${TMUX_PREFIX}${old}" nsess="${TMUX_PREFIX}${new}"
-  if [ -d "$PROJECTS_DIR/$new" ]; then echo "target '$new' already exists" >&2; exit 1; fi
+  if [ -d "$PROJECTS_DIR/$new" ]; then echo "[persist-dev] target '$new' already exists" >&2; exit 1; fi
   if [ ! -d "$PROJECTS_DIR/$old" ] && ! tmux has-session -t "$osess" 2>/dev/null; then
-    echo "Project '$old' not found" >&2; exit 1
+    echo "[persist-dev] Project '$old' not found" >&2; exit 1
   fi
   if tmux has-session -t "$osess" 2>/dev/null; then
-    tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "rename failed (session busy?)" >&2; exit 1; }
+    tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "[persist-dev] rename failed (session busy?)" >&2; exit 1; }
   fi
   if [ -d "$PROJECTS_DIR/$old" ]; then
-    mv "$PROJECTS_DIR/$old" "$PROJECTS_DIR/$new" 2>/dev/null || { echo "failed to rename directory" >&2; exit 1; }
+    mv "$PROJECTS_DIR/$old" "$PROJECTS_DIR/$new" 2>/dev/null || { echo "[persist-dev] failed to rename directory" >&2; exit 1; }
   fi
   [ -f "$META_DIR/$old.harness" ] && mv "$META_DIR/$old.harness" "$META_DIR/$new.harness" 2>/dev/null
   echo "Renamed $old -> $new"
@@ -274,13 +274,13 @@ cmd_log() {
   local name=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -n)       [ -z "${2:-}" ] && { echo "-n requires a line count" >&2; exit 1; }; lines="$2"; shift 2 ;;
+      -n)       [ -z "${2:-}" ] && { echo "[persist-dev] -n requires a line count" >&2; exit 1; }; lines="$2"; shift 2 ;;
       -n*)      lines="${1#-n}"; shift ;;
-      -*)       echo "unknown option: $1" >&2; exit 1 ;;
+      -*)       echo "[persist-dev] unknown option: $1" >&2; exit 1 ;;
       *)        if [ -z "$name" ]; then name="$1"; fi; shift ;;
     esac
   done
-  [ -z "$name" ] && { echo "usage: dev log <name> [-n lines]"; exit 1; }
+  [ -z "$name" ] && { echo "[persist-dev] usage: dev log <name> [-n lines]" >&2; exit 1; }
   valid_name "$name" || exit 1
 
   local sess="${TMUX_PREFIX}${name}"
@@ -293,7 +293,7 @@ cmd_log() {
     echo "=== log file for $name (last $lines lines) ==="
     tail -n "$lines" "$log_file"
   else
-    echo "No session or log file for '$name'." >&2
+    echo "[persist-dev] No session or log file for '$name'." >&2
     exit 1
   fi
 }
@@ -347,7 +347,7 @@ cmd_ctx() {
         if [ -f "$f" ]; then
           cat "$f"
         else
-          echo "Context note '${clean_name}' not found at $f" >&2
+          echo "[persist-dev] Context note '${clean_name}' not found at $f" >&2
           return 1
         fi
       else
@@ -368,17 +368,17 @@ cmd_ctx() {
       ;;
     sync)
       local target="${BACKUP_TARGET:-}"
-      [ -z "$target" ] && { echo "Set BACKUP_TARGET to sync context."; exit 1; }
+      [ -z "$target" ] && { echo "[persist-dev] Set BACKUP_TARGET to sync context." >&2; exit 1; }
       rsync -az "$CTX_DIR/" "$target/context/"
       echo "Synced context -> $target/context/"
       ;;
     pull)
       local target="${BACKUP_TARGET:-}"
-      [ -z "$target" ] && { echo "Set BACKUP_TARGET to pull context."; exit 1; }
+      [ -z "$target" ] && { echo "[persist-dev] Set BACKUP_TARGET to pull context." >&2; exit 1; }
       rsync -az "$target/context/" "$CTX_DIR/"
       echo "Pulled context <- $target/context/"
       ;;
-    *) echo "usage: dev ctx [show <name>|edit <name>|sync|pull]" ;;
+    *) echo "[persist-dev] usage: dev ctx [show <name>|edit <name>|sync|pull]" >&2 ;;
   esac
 }
 cmd_link() {
@@ -430,17 +430,17 @@ cmd_harness_add() {
   fi
 
   if [ -z "$name" ]; then
-    echo "usage: dev harness add <name> <launch command>" >&2
+    echo "[persist-dev] usage: dev harness add <name> <launch command>" >&2
     exit 1
   fi
   if [ -z "$cmd" ]; then
-    echo "missing launch command" >&2
+    echo "[persist-dev] missing launch command" >&2
     exit 1
   fi
 
   local bin="${cmd%% *}"
   if ! command -v "$bin" >/dev/null 2>&1; then
-    echo "${YELLOW}[WARN]${RESET} Harness binary '$bin' is not in PATH. Remember to install it before running."
+    echo "[persist-dev] Harness binary '$bin' is not in PATH. Remember to install it before running." >&2
   fi
 
   grep -v "^${name}=" "$CONFIG" > "$CONFIG.tmp" 2>/dev/null || true
@@ -523,11 +523,11 @@ EOF
 
 cmd_menu() {
   if ! command -v fzf >/dev/null 2>&1; then
-    echo "fzf is required for the interactive menu." >&2
-    echo "Install it or use direct commands:" >&2
-    echo "  dev ls              list projects" >&2
-    echo "  dev attach <name>   attach to a project" >&2
-    echo "  dev new <name>      create a new project" >&2
+    echo "[persist-dev] fzf is required for the interactive menu." >&2
+    echo "[persist-dev] Install it or use direct commands:" >&2
+    echo "[persist-dev]   dev ls              list projects" >&2
+    echo "[persist-dev]   dev attach <name>   attach to a project" >&2
+    echo "[persist-dev]   dev new <name>      create a new project" >&2
     echo >&2
     cmd_help
     return 0
@@ -594,11 +594,11 @@ main() {
                     case "$sub" in
                       list) cmd_harness_list "$@" ;;
                       add)  cmd_harness_add "$@" ;;
-                      *)    echo "usage: dev harness <list|add>"; exit 1 ;;
+                      *)    echo "[persist-dev] usage: dev harness <list|add>" >&2; exit 1 ;;
                     esac ;;
     help|-h|--help) cmd_help "$@" ;;
     menu|"")        cmd_menu "$@" ;;
-    *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|rename|log|doctor|ctx|backup|harness|link|menu|help>"; exit 1 ;;
+    *)              echo "[persist-dev] dev: unknown command '$cmd'" >&2; echo "[persist-dev] usage: dev <ls|new|attach|run|stop|rm|rename|log|doctor|ctx|backup|harness|link|menu|help>" >&2; exit 1 ;;
   esac
 }
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
