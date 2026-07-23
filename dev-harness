@@ -15,7 +15,7 @@
 set -u
 
 run_harness() {
-  if [ $# -lt 2 ]; then echo "usage: dev-harness <name> <harness cmd...>" >&2; exit 1; fi
+  if [ $# -lt 2 ]; then echo "usage: dev-harness <name> <harness cmd...>" >&2; return 1; fi
   name="$1"; shift
   cmd=("$@")
   flag_dir="${DEV_HARNESS_FLAG_DIR:-/workspace/projects/.persist}"
