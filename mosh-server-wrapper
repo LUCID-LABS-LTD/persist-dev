@@ -12,7 +12,7 @@ args=("$@")
 for i in "${!args[@]}"; do
   arg="${args[$i]}"
   case "$arg" in
-    -p|--port|--port=*) has_port=true ;;
+    -p*|--port|--port=*) has_port=true ;;
     --) has_dashdash=true; dashdash_idx=$i; break ;;
   esac
 done
