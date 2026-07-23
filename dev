@@ -608,11 +608,12 @@ cmd_menu() {
       read -r -p "Harness [default: $DEFAULT_HARNESS]: " h_choice
       h_choice="${h_choice:-$DEFAULT_HARNESS}"
 
-      cmd_new "$new_name" "$git_url" --harness "$h_choice"
-      tmux attach -t "${TMUX_PREFIX}${new_name}" || true
+      if (cmd_new "$new_name" "$git_url" --harness "$h_choice"); then
+        tmux attach -t "${TMUX_PREFIX}${new_name}" || true
+      fi
     else
       valid_name "$choice" || continue
-      cmd_attach "$choice" || true
+      (cmd_attach "$choice") || true
     fi
   done
 }
