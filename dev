@@ -283,15 +283,15 @@ cmd_rename() {
   if [ ! -d "$PROJECTS_DIR/$old" ] && ! tmux has-session -t "$osess" 2>/dev/null; then
     echo "[persist-dev] Project '$old' not found" >&2; exit 1
   fi
-  if tmux has-session -t "$osess" 2>/dev/null; then
-    tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "[persist-dev] rename failed (session busy?)" >&2; exit 1; }
-  fi
   if [ -d "$PROJECTS_DIR/$old" ]; then
     mv "$PROJECTS_DIR/$old" "$PROJECTS_DIR/$new" 2>/dev/null || { echo "[persist-dev] failed to rename directory" >&2; exit 1; }
   fi
   [ -f "$META_DIR/$old.harness" ] && mv "$META_DIR/$old.harness" "$META_DIR/$new.harness" 2>/dev/null
   [ -f "$META_DIR/$old.log" ] && mv "$META_DIR/$old.log" "$META_DIR/$new.log" 2>/dev/null
   [ -f "$META_DIR/$old.norestart" ] && mv "$META_DIR/$old.norestart" "$META_DIR/$new.norestart" 2>/dev/null
+  if tmux has-session -t "$osess" 2>/dev/null; then
+    tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "[persist-dev] rename failed (session busy?)" >&2; exit 1; }
+  fi
   echo "Renamed $old -> $new"
 }
 
@@ -443,7 +443,7 @@ cmd_link() {
   if command -v qrencode >/dev/null 2>&1; then
     echo "Scan QR code with your phone camera to open link:"
     echo
-    qrencode -t UTF8 "$url"
+    qrencode -t UTF8 "$url" || true
     echo
   fi
 }
