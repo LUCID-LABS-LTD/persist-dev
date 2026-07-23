@@ -30,8 +30,8 @@ run_harness() {
       echo "[persist-dev] stop flag set; not restarting."
       break
     fi
-    "${cmd[@]}" 2>&1 | tee -a "$flag_dir/$name.log"
-    code=${PIPESTATUS[0]}
+    "${cmd[@]}"
+    code=$?
     if [ "$code" -eq 0 ] || [ "$code" -eq 130 ] || [ "$code" -eq 143 ]; then
       echo "[persist-dev] harness exited ($code); not restarting."
       break

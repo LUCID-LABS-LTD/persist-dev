@@ -28,10 +28,6 @@ check "clean exit: not restarting" 0 grep -q "not restarting" <<< "$out"
 out=$(DEV_HARNESS_MAX=2 DEV_HARNESS_BASE_DELAY=0 run_harness t2 false)
 check "crash: gives up after max"   0 grep -q "giving up" <<< "$out"
 
-# Log output -> stdout/stderr captured to $name.log
-DEV_HARNESS_MAX=1 DEV_HARNESS_BASE_DELAY=0 run_harness tlog bash -c "echo hello_log" >/dev/null 2>&1
-check "logging: output saved to log file" 0 grep -q "hello_log" "$flag_dir/tlog.log"
-
 # Stop flag -> exits without spawning another instance.
 touch "$flag_dir/t3.norestart"
 out=$(DEV_HARNESS_MAX=5 DEV_HARNESS_BASE_DELAY=0 run_harness t3 false)
