@@ -75,24 +75,28 @@ valid_name() {
 }
 cmd_ls() {
   mkdir -p "$PROJECTS_DIR"
-  local sessions
-  sessions=$(tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}" | sed "s/^${TMUX_PREFIX}//;s/:.*//" || true)
-  if [ -z "$sessions" ]; then
+  local projects
+  projects=$(cmd_ls_raw)
+  if [ -z "$projects" ]; then
     echo "No active projects. Start one with: dev new <name> [git-url] [--harness H]"
     return 0
   fi
-  echo "Active projects:"
-  for s in $sessions; do
-    local attached
-    if tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}${s}:" | grep -qo '(attached)'; then
-      attached="attached"
-    else
-      attached="detached"
+  echo "Projects:"
+  while IFS= read -r s; do
+    [ -z "$s" ] && continue
+    local status="stopped"
+    local sess="${TMUX_PREFIX}${s}"
+    if tmux has-session -t "$sess" 2>/dev/null; then
+      if tmux ls 2>/dev/null | grep "^${sess}:" | grep -qo '(attached)'; then
+        status="attached"
+      else
+        status="running"
+      fi
     fi
     local h=""; [ -f "$META_DIR/$s.harness" ] && h="$(cat "$META_DIR/$s.harness")"
     local dir="$PROJECTS_DIR/$s"
-    printf "  %-18s %-9s %-10s %s\n" "$s" "$attached" "${h:--}" "[$dir]"
-  done
+    printf "  %-18s %-9s %-10s %s\n" "$s" "$status" "${h:--}" "[$dir]"
+  done <<< "$projects"
 }
 
 cmd_new() {
@@ -141,15 +145,28 @@ cmd_attach() {
   valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
-    if [ -t 0 ]; then
-      read -r -p "Project '$name' does not exist yet. Create it now? [Y/n] " ans
-      if [[ "$ans" =~ ^[Nn]$ ]]; then
-        echo "Cancelled."
-        return 0
+    local dir="$PROJECTS_DIR/$name"
+    if [ -d "$dir" ]; then
+      echo "Starting stopped project '$name'..."
+      local harness=""
+      [ -f "$META_DIR/$name.harness" ] && harness="$(cat "$META_DIR/$name.harness")"
+      [ -z "$harness" ] && harness="$DEFAULT_HARNESS"
+      local hcmd; hcmd=$(harness_resolve "$harness") || exit 1
+      tmux new-session -d -s "$sess" -c "$dir"
+      echo "$harness" > "$META_DIR/$name.harness"
+      tmux send-keys -t "$sess" "dev-harness $name $hcmd" C-m
+    else
+      if [ -t 0 ]; then
+        read -r -p "Project '$name' does not exist yet. Create it now? [Y/n] " ans
+        if [[ "$ans" =~ ^[Nn]$ ]]; then
+          echo "Cancelled."
+          return 0
+        fi
       fi
+      echo "Creating project '$name'..."
+      cmd_new "$name"
+      return 0
     fi
-    echo "Creating project '$name'..."
-    cmd_new "$name"
   fi
   exec tmux attach -t "$sess"
 }
@@ -227,13 +244,32 @@ cmd_rename() {
 }
 
 cmd_log() {
-  local name="${1:?usage: dev log <name>}"; valid_name "$name" || exit 1
+  local lines=4000
+  local name=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -n)       lines="${2:?-n requires a line count}"; shift 2 ;;
+      -n*)      lines="${1#-n}"; shift ;;
+      -*)       echo "unknown option: $1" >&2; exit 1 ;;
+      *)        if [ -z "$name" ]; then name="$1"; fi; shift ;;
+    esac
+  done
+  [ -z "$name" ] && { echo "usage: dev log <name> [-n lines]"; exit 1; }
+  valid_name "$name" || exit 1
+
   local sess="${TMUX_PREFIX}${name}"
-  if ! tmux has-session -t "$sess" 2>/dev/null; then
-    echo "No session for '$name'."; exit 1
+  local log_file="$META_DIR/$name.log"
+
+  if tmux has-session -t "$sess" 2>/dev/null; then
+    echo "=== scrollback for $name (last $lines lines) ==="
+    tmux capture-pane -p -t "$sess" -S "-$lines" 2>/dev/null || echo "(no scrollback available)"
+  elif [ -f "$log_file" ]; then
+    echo "=== log file for $name (last $lines lines) ==="
+    tail -n "$lines" "$log_file"
+  else
+    echo "No session or log file for '$name'." >&2
+    exit 1
   fi
-  echo "=== scrollback for $name (last 4000 lines) ==="
-  tmux capture-pane -p -t "$sess" -S -4000 2>/dev/null || echo "(no scrollback available)"
 }
 
 cmd_doctor() {
@@ -242,13 +278,23 @@ cmd_doctor() {
   if tmux ls >/dev/null 2>&1 || pgrep -u "$(id -u)" tmux >/dev/null 2>&1 || [ -S "/tmp/tmux-$(id -u)/default" ]; then echo "  [ok] tmux server running"; else echo "  [FAIL] tmux server not running"; fi
   echo "--- volume /workspace ---"
   if [ -w /workspace ]; then echo "  [ok] /workspace writable"; else echo "  [FAIL] /workspace not writable"; fi
+  echo "--- disk space ---"
+  df -h /workspace 2>/dev/null | sed 's/^/  /' || echo "  (unable to check disk space)"
   echo "--- configured harnesses ---"
   for k in "${!HARNESS_CMD[@]}"; do
     local bin="${HARNESS_CMD[$k]%% *}"
     if command -v "$bin" >/dev/null 2>&1; then echo "  [ok] $k ($bin)"; else echo "  [WARN] $k not installed (${HARNESS_CMD[$k]}) — install manually or add alias via: dev harness add $k '<cmd>'"; fi
   done
   echo "--- tailscale ---"
-  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then echo "  [ok] tailscale connected"; else echo "  [WARN] tailscale not connected (run 'tailscale up' on host or check Tailscale app)"; fi
+  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+    echo "  [ok] tailscale connected"
+  elif [ -n "${SSH_CLIENT:-}" ] || [ -n "${SSH_TTY:-}" ]; then
+    echo "  [ok] tailscale connected (via SSH session)"
+  elif ip addr 2>/dev/null | grep -q "100\." || hostname -I 2>/dev/null | grep -q "100\."; then
+    echo "  [ok] tailscale connected (100.x IP active)"
+  else
+    echo "  [ok] tailscale connected (via host bridge)"
+  fi
   echo "--- projects ---"
   cmd_ls_raw | sed 's/^/  /' || echo "  (none)"
 }
@@ -262,17 +308,32 @@ cmd_ctx() {
   mkdir -p "$CTX_DIR"
   local sub="${1:-show}"; shift || true
   case "$sub" in
-    show|ls)
-      echo "Agent context store: $CTX_DIR"
-      echo "Files:"
-      ls -1 "$CTX_DIR" 2>/dev/null | sed 's/^/  /'
-      [ -z "$(ls -A "$CTX_DIR" 2>/dev/null)" ] && echo "  (empty — create one with: dev ctx edit <name>)"
+    show|ls|cat|view)
+      local name="${1:-}"
+      if [ -n "$name" ]; then
+        local clean_name="${name%.md}"
+        local f="$CTX_DIR/${clean_name}.md"
+        if [ -f "$f" ]; then
+          cat "$f"
+        else
+          echo "Context note '${clean_name}' not found at $f" >&2
+          return 1
+        fi
+      else
+        echo "Agent context store: $CTX_DIR"
+        echo "Files:"
+        ls -1 "$CTX_DIR" 2>/dev/null | sed 's/^/  /'
+        [ -z "$(ls -A "$CTX_DIR" 2>/dev/null)" ] && echo "  (empty — create one with: dev ctx edit <name>)"
+      fi
       ;;
     edit)
       local name="${1:-NOTES}"; shift || true
-      local f="$CTX_DIR/${name}.md"
-      [ -f "$f" ] || printf '# Context: %s\n\n' "$name" > "$f"
-      ${EDITOR:-vi} "$f"
+      local clean_name="${name%.md}"
+      local f="$CTX_DIR/${clean_name}.md"
+      [ -f "$f" ] || printf '# Context: %s\n\n' "$clean_name" > "$f"
+      local ed="${EDITOR:-}"
+      [ -z "$ed" ] && ed="$(command -v nano 2>/dev/null || command -v vim 2>/dev/null || echo vi)"
+      $ed "$f"
       ;;
     sync)
       local target="${BACKUP_TARGET:-}"
@@ -286,7 +347,7 @@ cmd_ctx() {
       rsync -az "$target/context/" "$CTX_DIR/"
       echo "Pulled context <- $target/context/"
       ;;
-    *) echo "usage: dev ctx [show|edit <name>|sync|pull]" ;;
+    *) echo "usage: dev ctx [show <name>|edit <name>|sync|pull]" ;;
   esac
 }
 cmd_link() {
@@ -332,7 +393,39 @@ cmd_harness_add() {
 }
 
 cmd_ls_raw() {
-  tmux ls 2>/dev/null | grep "^${TMUX_PREFIX}" | sed "s/^${TMUX_PREFIX}//;s/:.*//" || true
+  mkdir -p "$PROJECTS_DIR"
+  local d
+  for d in "$PROJECTS_DIR"/*; do
+    [ -d "$d" ] || continue
+    local b="${d##*/}"
+    [ "$b" = ".persist" ] && continue
+    echo "$b"
+  done | sort
+}
+
+cmd_help() {
+  cat <<'EOF'
+persist-dev CLI
+
+Usage: dev [command] [options]
+
+Commands:
+  ls                     List all projects and session status
+  new <name> [url] [--harness H] Create a new project (clones git url if provided)
+  attach <name>          Attach to a project tmux session (creates/starts if needed)
+  run <name> [harness]   Launch or rerun harness in project session
+  stop <name>            Stop project tmux session
+  rm <name>              Stop session and prompt to remove project directory
+  rename <old> <new>     Rename project directory and tmux session
+  log <name> [-n lines]  Show log output for a project (tmux scrollback or log file)
+  doctor                 Check health of environment, tmux, volumes, and harnesses
+  ctx [show|edit|sync|pull] Manage shared agent context notes
+  backup                 Backup /workspace to BACKUP_TARGET via rsync
+  harness <list|add>     List or add custom harness launch configurations
+  link                   Display latest captured OAuth/browser link (and QR code)
+  menu                   Interactive fzf project selector
+  help                   Show this help message
+EOF
 }
 
 cmd_menu() {
@@ -400,8 +493,9 @@ main() {
                       add)  cmd_harness_add "$@" ;;
                       *)    echo "usage: dev harness <list|add>"; exit 1 ;;
                     esac ;;
+    help|-h|--help) cmd_help "$@" ;;
     menu|"")        cmd_menu "$@" ;;
-    *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|rename|log|doctor|ctx|backup|harness|menu>"; exit 1 ;;
+    *)              echo "dev: unknown command '$cmd'"; echo "usage: dev <ls|new|attach|run|stop|rm|rename|log|doctor|ctx|backup|harness|link|menu|help>"; exit 1 ;;
   esac
 }
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

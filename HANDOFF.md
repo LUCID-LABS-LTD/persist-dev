@@ -49,26 +49,27 @@ cannot do that for them unless you have access to that server.
 ```
    laptop / phone (anywhere, roaming IP)
         │
-        │  mosh  (UDP 60000-61000 — survives IP change + drops; raw SSH would freeze)
-        │
+│  mosh  (UDP 60000-60050 wrapper — survives IP change + drops; raw SSH would freeze)
+│
         ▼
    Tailscale tunnel  ──►  always-on server (own power / UPS, static on tailnet)
         │
-        │  port 2222 (ssh) + UDP 60000-61000 (mosh)
+│  port 2222 (ssh) + UDP 60000-60050 (mosh-server wrapper)
         ▼
    ┌─────────────────────────────────────────────────────────┐
    │ container: persist-dev  (podman, --restart unless-stopped)│
    │                                                          │
    │   sshd (port 22 ← host 2222)                             │
-   │   mosh-server                                            │
+│   mosh-server wrapper (binds MOSH_PORT_RANGE 60000:60050)   │
    │   tmux server (user: dev)  ◄── persistent, independent    │
    │     ├─ proj-foo  (pane → OpenCode TUI, cwd /workspace/…)  │
-   │     ├─ proj-bar  (pane → omp TUI)                         │
-   │     └─ proj-<name>  (one session per project)             │
+│     ├─ proj-bar  (pane → omp TUI)                         │
+│     └─ proj-<name>  (one session per project + status bar)  │
    │                                                          │
    │   volume: /workspace  ──►  host $DATA_DIR (~/.persist/…)  │
    │     ├─ projects/   (one dir per project + .persist meta)  │
-   │     ├─ .config/  .codex/  .gemini/  .omp/  (agent creds)  │
+│     ├─ .config/ .codex/ .gemini/ .omp/ (agent creds)    │
+│     └─ .context/  (dev ctx shared notes)                 │
    └─────────────────────────────────────────────────────────┘
         │
         ▼
@@ -89,10 +90,11 @@ mosh --ssh="ssh -p 2222" dev@<tailscale-ip> -- dev menu
 | --- | --- |
 | `dev` | The project/harness switcher CLI (runs as `dev` user). Subcommands: `ls new attach run stop rm rename log doctor ctx backup harness menu`. |
 | `dev-harness` | Auto-restart wrapper launched by `dev new`/`dev run`; restarts a crashed harness (clean quit / Ctrl-C does not restart). |
-| `entrypoint.sh` | Container init: ssh-keygen, start sshd, ensure the bind-mounted agent-config dirs are owned by `dev`, `tmux start-server`, keep-alive. |
-| `setup.sh` | Host bootstrap: install podman+tailscale, `tailscale up`, pull-or-build image, `podman run` (with agent-config bind mounts + optional resource limits), print connect cmd. Flags: `--secure`, `--cron`, `--cron-remove`. |
-| `Containerfile` | debian-slim + sshd + mosh + tmux + fzf + sudo + node/npm; installs **pinned** opencode (0.0.55), omp (v17.0.4), claude-code (2.1.214), codex (0.144.5). |
-| `config/tmux.conf` | tmux server config (256color, mouse, history 50k). |
+| `mosh-server-wrapper` | Intercepts `mosh-server` execution inside container to enforce `MOSH_PORT_RANGE` binding (default 60000-60050). |
+| `entrypoint.sh` | Container init: ssh-keygen, start sshd, save `/etc/mosh_ports`, ensure bind-mounted agent-config dirs ownership by `dev`, `tmux start-server`, keep-alive. |
+| `setup.sh` | Host bootstrap: install podman+tailscale, `tailscale up`, check mosh ports (`check_mosh_ports`), pull-or-build image, `podman run` (with agent-config bind mounts + MOSH_PORT_RANGE + optional resource limits), print connect cmd. Flags: `--secure`, `--cron`, `--cron-remove`. |
+| `Containerfile` | debian-slim + sshd + mosh + tmux + fzf + sudo + node/npm; installs mosh-server-wrapper, pinned opencode (0.0.55), omp (v17.0.4), claude-code (2.1.214), codex (0.144.5). |
+| `config/tmux.conf` | tmux server config (256color, mouse, history 50k, status bar with `[persist-dev]` left & `Detach: Ctrl-b d | Menu: dev menu` right). |
 | `config/sshd_config` | sshd config (port 22, password+key auth, no root). |
 | `README.md` | User docs: 5-min setup, harness table, multi-project workflow, backup, security, roadmap. |
 | `LICENSE` | MIT. |
@@ -168,6 +170,23 @@ the volume (`$DATA_DIR/{.config,.codex,.gemini,.omp}`) straight onto the dev hom
 `entrypoint.sh` no longer symlinks; it just ensures the dirs exist and are owned by `dev`. This is
 rm-rf-safe: an agent that deletes its config dir can't orphan persistence the way a symlink could.
 
+### T8 — Novice Onboarding & Tmux Status Bar ✅
+- Added an informative status bar in `config/tmux.conf`:
+  - `set -g status on`
+  - `set -g status-bg black`
+  - `set -g status-fg white`
+  - `set -g status-left "#[fg=green][persist-dev] "`
+  - `set -g status-right "#[fg=yellow] Detach: Ctrl-b d | Menu: dev menu "`
+- Serves as persistent, low-friction UX guidance for novice users learning tmux detaching and navigation.
+
+### T9 — Mosh Port Wrapper & Container Binding ✅
+- Created `mosh-server-wrapper` at `/usr/local/bin/mosh-server` and `/usr/bin/mosh-server`.
+- Intercepts container `mosh-server` invocations and forces UDP binding inside `MOSH_PORT_RANGE` (default `60000:60050` / `60000-60050`).
+- Configured `/etc/mosh_ports` during `entrypoint.sh` initialization and added `check_mosh_ports` / `ensure_mosh` checks in `setup.sh`.
+
+### T10 — Dev CTX Enhancements & Backup Sync ✅
+- `dev ctx` subcommands (`show`, `edit <name>`, `sync`, `pull`) provide shared agent context management in `/workspace/.context`.
+- Notes automatically shared across all project sessions, stored on persistent volume, and synchronized via `dev backup`.
 ---
 
 ## 7. Definition of done
@@ -177,7 +196,9 @@ rm-rf-safe: an agent that deletes its config dir can't orphan persistence the wa
 - [x] Installers pinned (T3).
 - [x] Security: default password forced-changed / key-only path documented (T4).
 - [x] `dev doctor` + auth + troubleshooting docs present (T5, T6).
-- [x] **Requirement #1 clarified with the user and implemented (`dev ctx`, §5/§6 T5b).**
+- [x] **Requirement #1 clarified with the user and implemented (`dev ctx`, §5/§6 T5b, T10).**
+- [x] Novice onboarding hardened: informative tmux status bar (`[persist-dev]` & detach/menu shortcuts) configured (T8).
+- [x] Mosh port wrapper implemented to enforce container UDP port range binding (T9).
 - [ ] Live test performed by the user (or a documented test plan with expected output).
 
 ---

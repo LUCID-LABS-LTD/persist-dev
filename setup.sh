@@ -2,10 +2,13 @@
 # Host bootstrap for persist-dev. Installs Podman + Tailscale if missing,
 # pulls the prebuilt image, runs the container, and prints the connect command.
 #
-# Flags:
-#   --secure        Force a non-default 'dev' password and optionally switch to key-only SSH.
-#   --cron          Schedule `dev backup` every 6h to BACKUP_TARGET (writes a host crontab entry).
-#   --cron-remove   Remove the scheduled backup cron entry.
+# Flags / Commands:
+#   --status, status    Show container status and port mappings.
+#   --logs, logs        Show container logs (tail 50).
+#   --restart, restart  Restart the container.
+#   --secure            Force a non-default 'dev' password and optionally switch to key-only SSH.
+#   --cron              Schedule `dev backup` every 6h to BACKUP_TARGET (writes a host crontab entry).
+#   --cron-remove       Remove the scheduled backup cron entry.
 # Env (all optional):
 #   PORT_SSH=2222          host SSH port mapped to container 22
 #   DATA_DIR=~/.persist/workspace   host dir mounted at container /workspace
@@ -16,6 +19,7 @@ set -euo pipefail
 
 IMAGE="ghcr.io/LUCID-LABS-LTD/persist-dev:latest"
 CONTAINER="persist-dev"
+PORT_SSH="${PORT_SSH:-2222}"
 REAL_USER="${SUDO_USER:-$USER}"
 REAL_HOME=$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6 || eval echo "~$REAL_USER")
 DATA_DIR="${DATA_DIR:-$REAL_HOME/.persist/workspace}"
@@ -173,6 +177,9 @@ secure_server() {
   echo
   echo "For key-only access (recommended):"
   echo "  ssh-copy-id -p $PORT_SSH dev@$ip"
+  if ! podman exec "$CONTAINER" test -s /home/dev/.ssh/authorized_keys 2>/dev/null; then
+    echo "Warning: No SSH keys detected in container. Ensure you have copied your key via 'ssh-copy-id -p $PORT_SSH dev@$ip' before disabling password authentication!"
+  fi
   read -r -p "  Disable password SSH auth entirely (key-only)? [y/N] " konly
   if [[ "$konly" =~ ^[Yy]$ ]]; then
     podman exec "$CONTAINER" sh -c "sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config; sshd -t && { pid=\$(cat /run/sshd.pid 2>/dev/null); [ -n \"\$pid\" ] && kill -HUP \$pid || pkill -HUP sshd; } || true"
@@ -235,12 +242,15 @@ remove_cron() {
 
 usage() {
   cat <<'EOF'
-Usage: sudo ./setup.sh [--secure] [--cron] [--cron-remove]
-  --secure        force a new 'dev' password and optionally go key-only
-  --cron          schedule `dev backup` every 6h (needs BACKUP_TARGET set)
-  --cron-remove   remove the scheduled backup cron entry
+Usage: sudo ./setup.sh [flags | commands]
+  --status, status    show container status and port mappings
+  --logs, logs        show container logs (tail 50)
+  --restart, restart  restart the container
+  --secure            force a new 'dev' password and optionally go key-only
+  --cron              schedule `dev backup` every 6h (needs BACKUP_TARGET set)
+  --cron-remove       remove the scheduled backup cron entry
 Env (all optional):
-  TS_AUTHKEY      tailscale auth key (headless servers) — joins the tailnet without a browser
+  TS_AUTHKEY          tailscale auth key (headless servers) — joins the tailnet without a browser
   PORT_SSH, DATA_DIR, BACKUP_TARGET, PERSIST_MEM, PERSIST_CPUS  (see header)
 EOF
 }
@@ -253,6 +263,19 @@ main() {
   echo
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --status|status)
+        podman ps -a --filter name="$CONTAINER"
+        podman port "$CONTAINER" || true
+        exit 0
+        ;;
+      --logs|logs)
+        podman logs --tail 50 "$CONTAINER"
+        exit 0
+        ;;
+      --restart|restart)
+        podman restart "$CONTAINER"
+        exit 0
+        ;;
       --secure)       SECURE=true; shift ;;
       --cron)         CRON=true; shift ;;
       --cron-remove)  CRON_REMOVE=true; shift ;;

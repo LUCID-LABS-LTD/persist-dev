@@ -17,6 +17,9 @@ check() {
   fi
 }
 
+flag_dir="$(mktemp -d)"
+export DEV_HARNESS_FLAG_DIR="$flag_dir"
+
 # Clean exit -> not restarting.
 out=$(DEV_HARNESS_MAX=3 DEV_HARNESS_BASE_DELAY=0 run_harness t1 true)
 check "clean exit: not restarting" 0 echo "$out" | grep -q "not restarting"
@@ -25,14 +28,16 @@ check "clean exit: not restarting" 0 echo "$out" | grep -q "not restarting"
 out=$(DEV_HARNESS_MAX=2 DEV_HARNESS_BASE_DELAY=0 run_harness t2 false)
 check "crash: gives up after max"   0 echo "$out" | grep -q "giving up"
 
-# Stop flag -> exits without spawning another instance. Use a writable flag dir.
-flag_dir="$(mktemp -d)"
-export DEV_HARNESS_FLAG_DIR="$flag_dir"
+# Log output -> stdout/stderr captured to $name.log
+DEV_HARNESS_MAX=1 DEV_HARNESS_BASE_DELAY=0 run_harness tlog bash -c "echo hello_log" >/dev/null 2>&1
+check "logging: output saved to log file" 0 grep -q "hello_log" "$flag_dir/tlog.log"
+
+# Stop flag -> exits without spawning another instance.
 touch "$flag_dir/t3.norestart"
 out=$(DEV_HARNESS_MAX=5 DEV_HARNESS_BASE_DELAY=0 run_harness t3 false)
 check "stop flag: not restarting"   0 echo "$out" | grep -q "stop flag set"
+
 unset DEV_HARNESS_FLAG_DIR
 rm -rf "$flag_dir"
-
 if [ "$fail" -ne 0 ]; then echo "$fail test(s) failed"; exit 1; fi
 echo "all dev-harness tests passed"

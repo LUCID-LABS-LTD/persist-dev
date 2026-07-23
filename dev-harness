@@ -19,6 +19,7 @@ run_harness() {
   shift || true
   cmd=("$@")
   flag_dir="${DEV_HARNESS_FLAG_DIR:-/workspace/projects/.persist}"
+  mkdir -p "$flag_dir"
   flag="$flag_dir/$name.norestart"
   max_tries="${DEV_HARNESS_MAX:-20}"
   delay="${DEV_HARNESS_BASE_DELAY:-3}"
@@ -29,8 +30,8 @@ run_harness() {
       echo "[persist-dev] stop flag set; not restarting."
       break
     fi
-    "${cmd[@]}"
-    code=$?
+    "${cmd[@]}" 2>&1 | tee -a "$flag_dir/$name.log"
+    code=${PIPESTATUS[0]}
     if [ "$code" -eq 0 ] || [ "$code" -eq 130 ] || [ "$code" -eq 143 ]; then
       echo "[persist-dev] harness exited ($code); not restarting."
       break
