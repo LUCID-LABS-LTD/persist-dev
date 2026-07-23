@@ -5,9 +5,15 @@ export LANG="${LANG:-C.UTF-8}"
 export LC_ALL="${LC_ALL:-C.UTF-8}"
 
 has_port=false
-for arg in "$@"; do
+has_dashdash=false
+dashdash_idx=-1
+
+args=("$@")
+for i in "${!args[@]}"; do
+  arg="${args[$i]}"
   case "$arg" in
-    -p|--port|--port=*) has_port=true; break ;;
+    -p|--port|--port=*) has_port=true ;;
+    --) has_dashdash=true; dashdash_idx=$i; break ;;
   esac
 done
 
@@ -21,7 +27,14 @@ if [ "$has_port" = "false" ]; then
   fi
   range="${range:-60000:60050}"
   range="${range//-/:}"
-  exec "$REAL_BIN" "$@" -p "$range"
+
+  if [ "$has_dashdash" = "true" ]; then
+    before=("${args[@]:0:$dashdash_idx}")
+    after=("${args[@]:$dashdash_idx}")
+    exec "$REAL_BIN" "${before[@]}" -p "$range" "${after[@]}"
+  else
+    exec "$REAL_BIN" "${args[@]}" -p "$range"
+  fi
 else
-  exec "$REAL_BIN" "$@"
+  exec "$REAL_BIN" "${args[@]}"
 fi
