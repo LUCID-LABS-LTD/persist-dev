@@ -147,6 +147,10 @@ run_container() {
       "$IMAGE"
   echo "== started container (mosh ports: $mosh_ports/udp) =="
   ensure_mosh
+  # Best-effort: enable systemd podman-restart service so container resumes on host reboot
+  if command -v systemctl >/dev/null 2>&1; then
+    $SUDO systemctl enable --now podman-restart 2>/dev/null || true
+  fi
 }
 
 secure_server() {
