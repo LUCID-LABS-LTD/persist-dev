@@ -303,12 +303,46 @@ cmd_ls_raw() {
 }
 
 cmd_menu() {
-  local choice
-  choice=$(cmd_ls_raw | fzf --prompt="project> " || true)
-  if [ -n "$choice" ]; then
-    exec tmux attach -t "${TMUX_PREFIX}${choice}"
-  fi
-  echo "(no project selected)"
+  while true; do
+    local raw_projects
+    raw_projects=$(cmd_ls_raw)
+
+    local items=("[+ Create new project]")
+    if [ -n "$raw_projects" ]; then
+      while IFS= read -r line; do
+        [ -n "$line" ] && items+=("$line")
+      done <<< "$raw_projects"
+    fi
+
+    local choice
+    choice=$(printf '%s\n' "${items[@]}" | fzf --prompt="project> " --header="Select project or create new (ESC to exit)" || true)
+
+    if [ -z "$choice" ]; then
+      echo "(menu exited)"
+      break
+    fi
+
+    if [ "$choice" = "[+ Create new project]" ]; then
+      read -r -p "New project name: " new_name
+      if [ -z "$new_name" ]; then
+        echo "Cancelled."
+        continue
+      fi
+      if ! valid_name "$new_name"; then
+        continue
+      fi
+      read -r -p "Git repo URL (optional, press Enter to skip): " git_url
+      echo "Available harnesses: ${!HARNESS_CMD[*]}"
+      read -r -p "Harness [default: $DEFAULT_HARNESS]: " h_choice
+      h_choice="${h_choice:-$DEFAULT_HARNESS}"
+
+      cmd_new "$new_name" "$git_url" --harness "$h_choice"
+      tmux attach -t "${TMUX_PREFIX}${new_name}" || true
+    else
+      valid_name "$choice" || continue
+      cmd_attach "$choice" || true
+    fi
+  done
 }
 
 main() {
