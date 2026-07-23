@@ -521,6 +521,7 @@ Examples:
 EOF
 }
 
+cmd_menu() {
   if ! command -v fzf >/dev/null 2>&1; then
     echo "fzf is required for the interactive menu." >&2
     echo "Install it or use direct commands:" >&2
@@ -531,7 +532,6 @@ EOF
     cmd_help
     return 0
   fi
-cmd_menu() {
   while true; do
     local raw_projects
     raw_projects=$(cmd_ls_raw)
