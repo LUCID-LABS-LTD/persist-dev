@@ -246,7 +246,7 @@ cmd_rm() {
   local sess="${TMUX_PREFIX}${name}"
   tmux kill-session -t "$sess" 2>/dev/null || true
   local dir="$PROJECTS_DIR/$name"
-  read -r -p "Delete project files at $dir ? [y/N] " ans
+  read -r -p "Delete project files at $dir ? [y/N] " ans || true
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     rm -rf "$dir" "$META_DIR/$name.harness" "$META_DIR/$name.log" "$META_DIR/$name.norestart" && echo "Removed $name"
   else
