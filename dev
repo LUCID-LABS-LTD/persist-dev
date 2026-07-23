@@ -278,6 +278,28 @@ cmd_ctx() {
     *) echo "usage: dev ctx [show|edit <name>|sync|pull]" ;;
   esac
 }
+cmd_link() {
+  local f="/workspace/.context/LATEST_URL.txt"
+  [ -f "$f" ] || f="/tmp/latest_url.txt"
+  if [ ! -f "$f" ]; then
+    echo "No OAuth / browser URL captured yet."
+    echo "When an agent or tool requests browser auth, the link will appear here."
+    exit 0
+  fi
+  local url
+  url=$(cat "$f")
+  echo
+  echo "=== Latest OAuth / Browser Link ==="
+  echo "URL:"
+  echo "  $url"
+  echo
+  if command -v qrencode >/dev/null 2>&1; then
+    echo "Scan QR code with your phone camera to open link:"
+    echo
+    qrencode -t UTF8 "$url"
+    echo
+  fi
+}
 
 cmd_harness_list() {
   echo "DEFAULT_HARNESS=$DEFAULT_HARNESS"
@@ -359,6 +381,7 @@ main() {
     log)            cmd_log "$@" ;;
     doctor|check)   cmd_doctor "$@" ;;
     ctx)            cmd_ctx "$@" ;;
+    link|url|oauth) cmd_link "$@" ;;
     backup)         cmd_backup "$@" ;;
     harness)        sub="${1:-list}"; shift || true
                     case "$sub" in

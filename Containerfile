@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nodejs \
     npm \
     unzip \
+    qrencode \
     && rm -rf /var/lib/apt/lists/* \
     && mv /usr/bin/mosh-server /usr/bin/mosh-server.real
 
-ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 BROWSER=/usr/local/bin/xdg-open
 RUN echo "LANG=C.UTF-8" > /etc/default/locale && echo "LC_ALL=C.UTF-8" >> /etc/default/locale
 
 # OpenCode CLI (https://opencode.ai). Version pinned for reproducible builds.
@@ -47,9 +48,13 @@ COPY dev-harness /usr/local/bin/dev-harness
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY mosh-server-wrapper /usr/local/bin/mosh-server
 COPY mosh-server-wrapper /usr/bin/mosh-server
+COPY xdg-open-wrapper /usr/local/bin/xdg-open
+COPY xdg-open-wrapper /usr/local/bin/www-browser
+COPY xdg-open-wrapper /usr/local/bin/x-www-browser
+COPY xdg-open-wrapper /usr/bin/xdg-open
 COPY config/tmux.conf /etc/tmux.conf
 COPY config/sshd_config /etc/ssh/sshd_config
-RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server /usr/bin/mosh-server /usr/bin/mosh-server.real \
+RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server /usr/bin/mosh-server /usr/bin/mosh-server.real /usr/local/bin/xdg-open /usr/local/bin/www-browser /usr/local/bin/x-www-browser /usr/bin/xdg-open \
     && mkdir -p /var/run/sshd /workspace /workspace/projects /home/dev \
     && useradd -m -s /bin/bash dev \
     && echo 'dev:dev' | chpasswd \

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# /usr/local/bin/xdg-open wrapper for headless persist-dev environment.
+# Captures browser opening requests from CLI tools (omp, agy, claude, opencode)
+# and formats the link with a QR code and file log.
+
+url="${1:-}"
+[ -z "$url" ] && exit 0
+
+mkdir -p /workspace/.context 2>/dev/null || true
+echo "$url" > /workspace/.context/LATEST_URL.txt 2>/dev/null || true
+echo "$url" > /tmp/latest_url.txt 2>/dev/null || true
+
+echo
+echo "======================================================================"
+echo " [persist-dev] BROWSER / OAUTH LINK DETECTED"
+echo "======================================================================"
+echo
+echo "URL:"
+echo "  $url"
+echo
+if command -v qrencode >/dev/null 2>&1; then
+  echo "Scan QR code with your phone camera to open link:"
+  echo
+  qrencode -t UTF8 "$url" 2>/dev/null || true
+  echo
+fi
+echo "Saved! Run 'dev link' anytime to view or scan again."
+echo "======================================================================"
+echo
