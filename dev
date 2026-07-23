@@ -112,7 +112,8 @@ cmd_ls() {
     fi
     local h=""; [ -f "$META_DIR/$s.harness" ] && h="$(cat "$META_DIR/$s.harness")"
     local dir="$PROJECTS_DIR/$s"
-    printf "  ${BOLD}%-16s${RESET} %-9s %-10s %s\n" "$s" "$status" "${h:--}" "[$dir]"
+    local pad=$((16 - ${#s})); [ "$pad" -lt 0 ] && pad=0
+    printf "  ${BOLD}%s${RESET}%*s %-9s %-10s %s\n" "$s" "$pad" "" "$status" "${h:--}" "[$dir]"
   done <<< "$projects"
 }
 
@@ -281,6 +282,10 @@ cmd_log() {
   done
   [ -z "$name" ] && { echo "[persist-dev] usage: dev log <name> [-n lines]" >&2; exit 1; }
   valid_name "$name" || exit 1
+  if ! [[ "$lines" =~ ^[0-9]+$ ]]; then
+    echo "[persist-dev] invalid line count: '$lines'" >&2
+    exit 1
+  fi
 
   local sess="${TMUX_PREFIX}${name}"
   local log_file="$META_DIR/$name.log"
