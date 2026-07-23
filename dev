@@ -61,8 +61,12 @@ harness_resolve() {
 valid_name() {
   local n="$1"
   if [ -z "$n" ]; then echo "project name required" >&2; return 1; fi
-  if [[ "$n" == *"/"* ]] || [[ "$n" == *".."* ]] || [[ "$n" == *" "* ]]; then
-    echo "invalid project name '$n' (no '/', '..', or spaces)" >&2; return 1
+  if [[ "$n" == *" "* ]]; then
+    local suggested="${n// /-}"
+    echo "invalid project name '$n' (contains spaces — did you mean '$suggested'?)" >&2; return 1
+  fi
+  if [[ "$n" == *"/"* ]] || [[ "$n" == *".."* ]]; then
+    echo "invalid project name '$n' (no '/' or '..' allowed)" >&2; return 1
   fi
   if [[ ! "$n" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     echo "invalid project name '$n' (allowed: A-Za-z0-9 _ . -)" >&2; return 1
@@ -137,7 +141,14 @@ cmd_attach() {
   valid_name "$name" || exit 1
   local sess="${TMUX_PREFIX}${name}"
   if ! tmux has-session -t "$sess" 2>/dev/null; then
-    echo "No session for '$name'; creating one..."
+    if [ -t 0 ]; then
+      read -r -p "Project '$name' does not exist yet. Create it now? [Y/n] " ans
+      if [[ "$ans" =~ ^[Nn]$ ]]; then
+        echo "Cancelled."
+        return 0
+      fi
+    fi
+    echo "Creating project '$name'..."
     cmd_new "$name"
   fi
   exec tmux attach -t "$sess"
@@ -234,10 +245,10 @@ cmd_doctor() {
   echo "--- configured harnesses ---"
   for k in "${!HARNESS_CMD[@]}"; do
     local bin="${HARNESS_CMD[$k]%% *}"
-    if command -v "$bin" >/dev/null 2>&1; then echo "  [ok] $k ($bin)"; else echo "  [WARN] $k not installed: ${HARNESS_CMD[$k]}"; fi
+    if command -v "$bin" >/dev/null 2>&1; then echo "  [ok] $k ($bin)"; else echo "  [WARN] $k not installed (${HARNESS_CMD[$k]}) — install manually or add alias via: dev harness add $k '<cmd>'"; fi
   done
   echo "--- tailscale ---"
-  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then echo "  [ok] tailscale connected"; else echo "  [WARN] tailscale not connected"; fi
+  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then echo "  [ok] tailscale connected"; else echo "  [WARN] tailscale not connected (run 'tailscale up' on host or check Tailscale app)"; fi
   echo "--- projects ---"
   cmd_ls_raw | sed 's/^/  /' || echo "  (none)"
 }

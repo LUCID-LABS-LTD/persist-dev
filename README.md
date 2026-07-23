@@ -7,6 +7,7 @@ always-on server (your own hardware, a VPS, or a seedbox). You reach it over **m
 work inside **tmux** sessions, and use **OpenCode** (or any TUI agent) without ever losing state
 when the lights go out or the ISP blinks.
 
+> **Mental Model:** Think of `persist-dev` as a virtual computer in the cloud that keeps your AI coding agents and projects running 24/7. Your laptop or phone is just a window into it — closing your laptop or losing Wi-Fi never interrupts your work.
 ## Why
 
 If you code through flaky power/internet (Nigeria, loadshedding, roaming cellular), a raw SSH
@@ -172,6 +173,29 @@ wrapping `dev backup` is all you need for off-box durability.
 > Project names are restricted to `A-Za-z0-9 _ . -` (no `/`, `..`, or spaces). They map
 > directly to a directory under `/workspace/projects`, so path traversal is not possible.
 
+## Novice Troubleshooting & FAQ
+
+### How do I detach from a session without closing my work?
+Press **`Ctrl+b`**, release both keys, then press **`d`**. Your project keeps running in the background. To return or switch projects, run `dev menu`.
+
+### How do I enter my API keys (OpenAI / Anthropic / Gemini)?
+Attach to your project (`dev attach <name>`) and log in directly:
+- **Claude Code**: run `claude` (or set `export ANTHROPIC_API_KEY="sk-..."` in `~/.bashrc`)
+- **OpenAI / Codex**: run `codex` (or set `export OPENAI_API_KEY="sk-..."`)
+- **Oh My Pi / Gemini**: run `omp` (or set `export GEMINI_API_KEY="..."`)
+
+### What if I get an OAuth browser link when signing in?
+The container automatically catches browser links! It prints a clean URL box **AND** displays an ASCII QR code. You can scan the QR code with your phone camera or click the link. Run **`dev link`** anytime to view the latest link and QR code.
+
+### How do I reset or change the `dev` user password?
+SSH into the server and run `sudo ./setup.sh --secure` (or run `passwd` inside the session).
+
+### Mosh says "Did not receive any packets" or SSH times out?
+Ensure your host server's firewall allows port 2222 (TCP) and ports 60000-60050 (UDP):
+```bash
+sudo ufw allow 2222/tcp && sudo ufw allow 60000:60050/udp
+```
+Also ensure Tailscale is running on your client device (`sudo tailscale up --accept-dns=false` if using Cloudflare WARP).
 ## Security notes
 
 - The container's `dev` user ships with password `dev`. **Change it** (`passwd` over SSH) or, better,

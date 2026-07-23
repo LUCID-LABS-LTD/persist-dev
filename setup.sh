@@ -16,8 +16,9 @@ set -euo pipefail
 
 IMAGE="ghcr.io/LUCID-LABS-LTD/persist-dev:latest"
 CONTAINER="persist-dev"
-PORT_SSH="${PORT_SSH:-2222}"
-DATA_DIR="${DATA_DIR:-$HOME/.persist/workspace}"
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(getent passwd "$REAL_USER" 2>/dev/null | cut -d: -f6 || eval echo "~$REAL_USER")
+DATA_DIR="${DATA_DIR:-$REAL_HOME/.persist/workspace}"
 PODMAN_MEM="${PERSIST_MEM:-}"
 PODMAN_CPUS="${PERSIST_CPUS:-}"
 MOSH_PORT_RANGE="${MOSH_PORT_RANGE:-60000-60050}"
@@ -103,15 +104,20 @@ check_mosh_ports() {
   fi
 }
 pull_or_build() {
-  if podman pull "$IMAGE" 2>/dev/null; then
+  echo "== checking container image =="
+  if podman pull "$IMAGE"; then
     echo "== pulled prebuilt image =="
   else
     echo "== prebuilt image unavailable; building locally (slower) =="
+    if [ ! -f Containerfile ]; then
+      echo "Error: Containerfile not found in current directory ($(pwd))."
+      echo "Please run setup.sh from the cloned persist-dev directory."
+      exit 1
+    fi
     podman build -t persist-dev-local -f Containerfile .
     IMAGE="persist-dev-local"
   fi
 }
-
 run_container() {
   check_mosh_ports
   local mosh_ports="${MOSH_PORT_RANGE:-60000-60050}"
@@ -240,6 +246,11 @@ EOF
 }
 
 main() {
+  echo "======================================================"
+  echo "  persist-dev — Resumable Multi-Project Dev Box"
+  echo "======================================================"
+  echo "Setting up Podman, Tailscale, and persistent container..."
+  echo
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --secure)       SECURE=true; shift ;;

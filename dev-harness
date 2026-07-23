@@ -40,7 +40,7 @@ run_harness() {
       echo "[persist-dev] harness crashed $attempt times; giving up."
       break
     fi
-    echo "[persist-dev] harness crashed (code $code); restarting in ${delay}s (touch $flag to stop)..."
+    echo "[persist-dev] harness crashed (code $code); restarting in ${delay}s (run 'dev stop $name' to stop)..."
     sleep "$delay"
     delay=$(( delay * 2 > 60 ? 60 : delay * 2 ))
   done
