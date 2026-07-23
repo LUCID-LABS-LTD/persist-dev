@@ -15,8 +15,8 @@
 set -u
 
 run_harness() {
-  name="${1:?usage: dev-harness <name> <harness cmd...>}"
-  shift || true
+  if [ $# -lt 2 ]; then echo "usage: dev-harness <name> <harness cmd...>" >&2; exit 1; fi
+  name="$1"; shift
   cmd=("$@")
   flag_dir="${DEV_HARNESS_FLAG_DIR:-/workspace/projects/.persist}"
   mkdir -p "$flag_dir"
@@ -41,7 +41,8 @@ run_harness() {
       echo "[persist-dev] harness crashed $attempt times; giving up."
       break
     fi
-    echo "[persist-dev] harness crashed (code $code); restarting in ${delay}s (run 'dev stop $name' to stop)..."
+    echo "[persist-dev] harness crashed (code $code); restarting in ${delay}s..."
+    echo "  stop with: dev stop $name  or  touch $flag"
     sleep "$delay"
     delay=$(( delay * 2 > 60 ? 60 : delay * 2 ))
   done

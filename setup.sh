@@ -52,7 +52,7 @@ pkg_install() {
     apt)    $SUDO apt-get update -y >/dev/null 2>&1 || echo -e "  ${YELLOW}[warn]${RESET} apt update failed; install may use stale indexes"; $SUDO apt-get install -y "$@" ;;
     dnf)    $SUDO dnf install -y "$@" ;;
     yum)    $SUDO yum install -y "$@" ;;
-    pacman) $SUDO pacman -S --noconfirm "$@" ;;
+    pacman) $SUDO pacman -Sy --noconfirm "$@" ;;
     zypper) $SUDO zypper install -y "$@" ;;
     apk)    $SUDO apk add --no-cache "$@" ;;
     *) echo -e "${RED}${BOLD}Unsupported package manager — install manually: $*${RESET}"; exit 1 ;;
@@ -146,6 +146,11 @@ run_container() {
   fi
 
   mkdir -p "$DATA_DIR"/.config "$DATA_DIR"/.codex "$DATA_DIR"/.gemini "$DATA_DIR"/.omp
+  # If running under sudo, ensure the real user owns the data directory so
+  # rootless Podman (or manual inspections) work without permission errors.
+  if [ -n "${SUDO_USER:-}" ]; then
+    chown -R "$REAL_USER:$REAL_USER" "$DATA_DIR"
+  fi
   # Bind-mount the whole volume at /workspace AND its agent-config subdirs onto
   # the dev home. The subdir mounts are nested inside $DATA_DIR on purpose:
   # /workspace/.config etc. resolve to the very volume paths mounted at
@@ -174,7 +179,7 @@ secure_server() {
   local ip="$1"
   echo
   echo -e "${BOLD}${CYAN}== SECURE: the 'dev' user ships with password 'dev'. Change it. ==${RESET}"
-  read -r -s -p "  new dev password (echoed as you type)> " pw; echo
+  read -r -s -p "  new dev password: " pw; echo
   if [ -z "$pw" ]; then
     pw=$(head -c 12 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-16)
     echo "  (blank entered) generated random password: $pw"
@@ -254,6 +259,8 @@ remove_cron() {
 usage() {
   cat <<'EOF'
 Usage: sudo ./setup.sh [flags | commands]
+       sudo TS_AUTHKEY=tskey-xxx ./setup.sh   # headless (no browser login)
+       sudo PORT_SSH=2345 ./setup.sh           # custom SSH port
   --status, status    show container status and port mappings
   --logs, logs        show container logs (tail 50)
   --restart, restart  restart the container

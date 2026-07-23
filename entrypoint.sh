@@ -31,8 +31,10 @@ if [ -n "$PS1" ] && [ -z "${TMUX:-}" ]; then
   echo "  dev doctor       - Check environment health"
   echo "  dev help         - Display help for all commands"
   echo "----------------------------------------------------------------------"
+  echo "  FIRST TIME? Change the default password: passwd"
+  echo "  Copy your SSH key: ssh-copy-id -p 2222 dev@$(hostname -s 2>/dev/null || echo '<host>')"
+  echo "----------------------------------------------------------------------"
   echo "Tip: Press Ctrl+b then d to detach from a project session anytime."
-  echo "======================================================================"
   echo
 fi
 EOF
