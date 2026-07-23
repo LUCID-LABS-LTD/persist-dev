@@ -56,7 +56,7 @@ COPY xdg-open-wrapper /usr/bin/xdg-open
 COPY config/tmux.conf /etc/tmux.conf
 COPY config/sshd_config /etc/ssh/sshd_config
 RUN chmod +x /usr/local/bin/dev /usr/local/bin/dev-harness /usr/local/bin/entrypoint.sh /usr/local/bin/mosh-server /usr/bin/mosh-server /usr/bin/mosh-server.real /usr/local/bin/xdg-open /usr/local/bin/www-browser /usr/local/bin/x-www-browser /usr/bin/xdg-open \
-    && mkdir -p /var/run/sshd /workspace /workspace/projects /home/dev \
+    && mkdir -p /var/run/sshd /workspace /workspace/projects \
     && useradd -m -s /bin/bash dev \
     && echo 'dev:dev' | chpasswd \
     && echo 'dev ALL=(ALL) ALL' > /etc/sudoers.d/dev   # password required, not passwordless root
