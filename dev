@@ -286,9 +286,9 @@ cmd_rename() {
   if [ -d "$PROJECTS_DIR/$old" ]; then
     mv "$PROJECTS_DIR/$old" "$PROJECTS_DIR/$new" 2>/dev/null || { echo "[persist-dev] failed to rename directory" >&2; exit 1; }
   fi
-  [ -f "$META_DIR/$old.harness" ] && mv "$META_DIR/$old.harness" "$META_DIR/$new.harness" 2>/dev/null
-  [ -f "$META_DIR/$old.log" ] && mv "$META_DIR/$old.log" "$META_DIR/$new.log" 2>/dev/null
-  [ -f "$META_DIR/$old.norestart" ] && mv "$META_DIR/$old.norestart" "$META_DIR/$new.norestart" 2>/dev/null
+  [ -f "$META_DIR/$old.harness" ] && mv "$META_DIR/$old.harness" "$META_DIR/$new.harness" 2>/dev/null || true
+  [ -f "$META_DIR/$old.log" ] && mv "$META_DIR/$old.log" "$META_DIR/$new.log" 2>/dev/null || true
+  [ -f "$META_DIR/$old.norestart" ] && mv "$META_DIR/$old.norestart" "$META_DIR/$new.norestart" 2>/dev/null || true
   if tmux has-session -t "$osess" 2>/dev/null; then
     tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "[persist-dev] rename failed (session busy?)" >&2; exit 1; }
   fi
