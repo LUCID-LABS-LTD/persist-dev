@@ -292,9 +292,11 @@ cmd_rename() {
   if [ -f "$META_DIR/$old.log" ]; then
     mv "$META_DIR/$old.log" "$META_DIR/$new.log" 2>/dev/null || echo "[persist-dev] warning: could not move log for '$old'" >&2
   fi
-  if [ -f "$META_DIR/$old.norestart" ]; then
-    mv "$META_DIR/$old.norestart" "$META_DIR/$new.norestart" 2>/dev/null || echo "[persist-dev] warning: could not move restart flag for '$old'" >&2
-  fi
+  # NOT moving old.norestart — running dev-harness inside the renamed session
+  # still checks $flag_dir/old.norestart. Moving it would orphan the flag and
+  # defeat the stop-flag mechanism.  The orphan is harmless: it gets cleaned
+  # up on next `dev new old` or manually.
+  rm -f "$META_DIR/$old.norestart"
   if tmux has-session -t "$osess" 2>/dev/null; then
     tmux rename-session -t "$osess" "$nsess" 2>/dev/null || { echo "[persist-dev] rename failed (session busy?)" >&2; exit 1; }
   fi
