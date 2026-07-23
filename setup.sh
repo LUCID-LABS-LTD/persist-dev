@@ -30,6 +30,7 @@ SECURE=false
 CRON=false
 CRON_REMOVE=false
 
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'; else RED=''; GREEN=''; YELLOW=''; BLUE=''; CYAN=''; BOLD=''; RESET=''; fi
 # Run privileged commands via sudo only when not already root.
 if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
 
@@ -48,26 +49,26 @@ detect_pkg() {
 pkg_install() {
   detect_pkg
   case "$PKG" in
-    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || echo "  [warn] apt update failed; install may use stale indexes"; $SUDO apt-get install -y "$@" ;;
+    apt)    $SUDO apt-get update -y >/dev/null 2>&1 || echo -e "  ${YELLOW}[warn]${RESET} apt update failed; install may use stale indexes"; $SUDO apt-get install -y "$@" ;;
     dnf)    $SUDO dnf install -y "$@" ;;
     yum)    $SUDO yum install -y "$@" ;;
     pacman) $SUDO pacman -S --noconfirm "$@" ;;
     zypper) $SUDO zypper install -y "$@" ;;
     apk)    $SUDO apk add --no-cache "$@" ;;
-    *) echo "Unsupported package manager — install manually: $*"; exit 1 ;;
+    *) echo -e "${RED}${BOLD}Unsupported package manager — install manually: $*${RESET}"; exit 1 ;;
   esac
 }
 
 install_podman() {
   if command -v podman >/dev/null 2>&1; then return 0; fi
-  echo "== installing podman =="
+  echo -e "${BOLD}${CYAN}== installing podman ==${RESET}"
   command -v curl >/dev/null 2>&1 || pkg_install curl
   pkg_install podman
 }
 
 install_tailscale() {
   if command -v tailscale >/dev/null 2>&1; then return 0; fi
-  echo "== installing tailscale =="
+  echo -e "${BOLD}${CYAN}== installing tailscale ==${RESET}"
   command -v curl >/dev/null 2>&1 || pkg_install curl
   # Tailscale's installer is fetched over HTTPS and run as root (or via sudo).
   # Download to a temp file first rather than piping curl straight into sh.
@@ -87,7 +88,11 @@ ensure_mosh() {
   # The container is debian-based, so apt is the right manager here.
   podman exec "$CONTAINER" bash -c \
     "apt-get update -y >/dev/null 2>&1; apt-get install -y mosh" \
-    || echo "  [warn] could not auto-install mosh-server. Install 'mosh' in the container manually; mosh connections will fail without it."
+    || {
+      echo -e "  ${YELLOW}[warn]${RESET} could not auto-install mosh-server."
+      echo "  Install 'mosh' in the container manually; mosh connections"
+      echo "  will fail without it."
+    }
 }
 
 # Check whether any UDP port in MOSH_PORT_RANGE (60000-60050) is bound on the host.
@@ -100,21 +105,23 @@ check_mosh_ports() {
     local e="${ports##*-}"
     for p in $(seq "$s" "$e" 2>/dev/null || echo "$s"); do
       if echo "$bound" | grep -qE ":$p([[:space:]]|$)"; then
-        echo "  [warn] UDP port $p in range $ports appears in use on host."
-        echo "  Free port $p or set MOSH_PORT_RANGE=<start:end> (note: if you change this range, pass -p <port> to your mosh client)."
+        echo -e "  ${YELLOW}[warn]${RESET} UDP port $p in range $ports appears in use on host."
+        echo "  Free port $p or set MOSH_PORT_RANGE=<start:end>"
+        echo "  (note: if you change this range, pass -p <port> to your"
+        echo "  mosh client)."
         break
       fi
     done
   fi
 }
 pull_or_build() {
-  echo "== checking container image =="
+  echo -e "${BOLD}${CYAN}== checking container image ==${RESET}"
   if podman pull "$IMAGE"; then
-    echo "== pulled prebuilt image =="
+    echo -e "${BOLD}${CYAN}== pulled prebuilt image ==${RESET}"
   else
-    echo "== prebuilt image unavailable; building locally (slower) =="
+    echo -e "${BOLD}${CYAN}== prebuilt image unavailable; building locally (slower) ==${RESET}"
     if [ ! -f Containerfile ]; then
-      echo "Error: Containerfile not found in current directory ($(pwd))."
+      echo -e "${RED}${BOLD}Error: Containerfile not found in current directory ($(pwd)).${RESET}"
       echo "Please run setup.sh from the cloned persist-dev directory."
       exit 1
     fi
@@ -130,11 +137,11 @@ run_container() {
   [ -n "$PODMAN_CPUS" ] && extra+=(--cpus "$PODMAN_CPUS")
   if podman ps -a --format '{{.Names}}' | grep -qx "$CONTAINER"; then
     if podman start "$CONTAINER" >/dev/null 2>&1; then
-      echo "== restarted existing container =="
+      echo -e "${BOLD}${CYAN}== restarted existing container ==${RESET}"
       ensure_mosh
       return 0
     fi
-    echo "== container failed to start (stale port spec?); recreating... =="
+    echo -e "${BOLD}${CYAN}== container failed to start (stale port spec?); recreating... ==${RESET}"
     podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
   fi
 
@@ -155,7 +162,7 @@ run_container() {
       --restart unless-stopped \
       "${extra[@]}" \
       "$IMAGE"
-  echo "== started container (mosh ports: $mosh_ports/udp) =="
+  echo -e "${BOLD}${CYAN}== started container (mosh ports: $mosh_ports/udp) ==${RESET}"
   ensure_mosh
   # Best-effort: enable systemd podman-restart service so container resumes on host reboot
   if command -v systemctl >/dev/null 2>&1; then
@@ -166,7 +173,7 @@ run_container() {
 secure_server() {
   local ip="$1"
   echo
-  echo "== SECURE: the 'dev' user ships with password 'dev'. Change it. =="
+  echo -e "${BOLD}${CYAN}== SECURE: the 'dev' user ships with password 'dev'. Change it. ==${RESET}"
   read -r -s -p "  new dev password (echoed as you type)> " pw; echo
   if [ -z "$pw" ]; then
     pw=$(head -c 12 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-16)
@@ -178,7 +185,10 @@ secure_server() {
   echo "For key-only access (recommended):"
   echo "  ssh-copy-id -p $PORT_SSH dev@$ip"
   if ! podman exec "$CONTAINER" test -s /home/dev/.ssh/authorized_keys 2>/dev/null; then
-    echo "Warning: No SSH keys detected in container. Ensure you have copied your key via 'ssh-copy-id -p $PORT_SSH dev@$ip' before disabling password authentication!"
+    echo -e "  ${YELLOW}Warning:${RESET} No SSH keys detected in container."
+    echo "  Ensure you have copied your key via:"
+    echo "    ssh-copy-id -p $PORT_SSH dev@$ip"
+    echo "  before disabling password authentication!"
   fi
   read -r -p "  Disable password SSH auth entirely (key-only)? [y/N] " konly
   if [[ "$konly" =~ ^[Yy]$ ]]; then
@@ -191,12 +201,12 @@ secure_server() {
 ensure_cron() {
   detect_pkg
   command -v crontab >/dev/null 2>&1 || {
-    echo "== installing cron =="
+    echo -e "${BOLD}${CYAN}== installing cron ==${RESET}"
     case "$PKG" in
       apt|zypper) pkg_install cron ;;
       dnf|yum|pacman) pkg_install cronie ;;
       apk) pkg_install cron ;;
-      *) echo "Unsupported distro — install a cron daemon manually"; exit 1 ;;
+      *) echo -e "${RED}${BOLD}Unsupported distro — install a cron daemon manually${RESET}"; exit 1 ;;
     esac
   }
   start_cron
@@ -224,7 +234,8 @@ start_cron() {
 install_cron() {
   local target="${BACKUP_TARGET:-}"
   if [ -z "$target" ]; then
-    echo "BACKUP_TARGET not set; cannot schedule backup. Export it first, e.g.:"
+    echo -e "${RED}${BOLD}Error: BACKUP_TARGET not set; cannot schedule backup.${RESET}"
+    echo "Export it first, e.g.:"
     echo "  export BACKUP_TARGET='myserver:/backups/persist'"
     exit 1
   fi
@@ -232,12 +243,12 @@ install_cron() {
   local log="$DATA_DIR/../backup-cron.log"
   local line="0 */6 * * *  BACKUP_TARGET='$target' podman exec '$CONTAINER' dev backup >> '$log' 2>&1"
   ( crontab -l 2>/dev/null | grep -v "persist-dev backup"; echo "$line" ) | crontab - || true
-  echo "== scheduled backup: $line =="
+  echo -e "${BOLD}${CYAN}== scheduled backup: $line ==${RESET}"
 }
 
 remove_cron() {
   ( crontab -l 2>/dev/null | grep -v "persist-dev backup" ) | crontab - || true
-  echo "== removed persist-dev backup cron entry =="
+  echo -e "${BOLD}${CYAN}== removed persist-dev backup cron entry ==${RESET}"
 }
 
 usage() {
@@ -256,9 +267,9 @@ EOF
 }
 
 main() {
-  echo "======================================================"
+  echo -e "${BOLD}${CYAN}======================================================"
   echo "  persist-dev — Resumable Multi-Project Dev Box"
-  echo "======================================================"
+  echo -e "======================================================${RESET}"
   echo "Setting up Podman, Tailscale, and persistent container..."
   echo
   while [[ $# -gt 0 ]]; do
@@ -280,7 +291,7 @@ main() {
       --cron)         CRON=true; shift ;;
       --cron-remove)  CRON_REMOVE=true; shift ;;
       -h|--help)      usage; exit 0 ;;
-      *) echo "unknown flag: $1"; usage; exit 1 ;;
+      *) echo -e "${RED}${BOLD}unknown flag: $1${RESET}"; usage; exit 1 ;;
     esac
   done
   command -v curl >/dev/null 2>&1 || { detect_pkg; pkg_install curl; }
@@ -304,10 +315,10 @@ main() {
   if $SECURE;     then secure_server "$ip"; fi
 
   echo
-  echo "=============================================="
+  echo -e "${BOLD}${GREEN}=============================================="
   echo " persist-dev is up"
   echo " Server Tailscale IP: $ip"
-  echo "=============================================="
+  echo -e "==============================================${RESET}"
   echo
   echo "From your laptop / phone:"
   echo "  mosh --ssh=\"ssh -p $PORT_SSH\" dev@$ip -- dev menu"
@@ -315,7 +326,8 @@ main() {
   echo "  mosh --ssh=\"ssh -p $PORT_SSH\" dev@$ip -- dev attach <name>"
   echo
   if ! $SECURE; then
-    echo "SECURITY: 'dev' user password is 'dev'. Change it (or run: ./setup.sh --secure):"
+    echo -e "${YELLOW}SECURITY:${RESET} 'dev' user password is 'dev'."
+    echo "  Change it (or run: ./setup.sh --secure):"
     echo "  ssh -p $PORT_SSH dev@$ip   # then: passwd"
     echo "  # or copy your key: ssh-copy-id -p $PORT_SSH dev@$ip"
   fi

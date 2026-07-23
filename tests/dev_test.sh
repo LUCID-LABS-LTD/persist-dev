@@ -74,5 +74,18 @@ doc_out=$(cmd_doctor)
 check "cmd_doctor contains volume" 0 grep -q "volume /workspace" <<< "$doc_out"
 check "cmd_doctor contains tailscale" 0 grep -q "tailscale" <<< "$doc_out"
 
+# cmd_help line length check (all lines under 76 cols)
+max_len=0
+while IFS= read -r line; do
+  len=${#line}
+  if [ "$len" -gt "$max_len" ]; then max_len=$len; fi
+done <<< "$help_out"
+check "cmd_help max line length <= 76" 0 [ "$max_len" -le 76 ]
+
+# cmd_harness_add binary check warning
+hadd_out=$(cmd_harness_add non_existent_bin_xyz "non_existent_bin_xyz_cmd --flag" 2>&1)
+check "cmd_harness_add binary missing warning" 0 grep -q "is not in PATH" <<< "$hadd_out"
+check "cmd_harness_add binary missing WARN badge" 0 grep -q "WARN" <<< "$hadd_out"
+
 if [ "$fail" -ne 0 ]; then echo "$fail test(s) failed"; exit 1; fi
 echo "all dev tests passed"

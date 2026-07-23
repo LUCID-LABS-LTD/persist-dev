@@ -17,6 +17,26 @@ echo "LC_ALL=C.UTF-8" >> /etc/environment
 mosh_range="${MOSH_PORT_RANGE:-60000-60050}"
 echo "${mosh_range//-/:}" > /etc/mosh_ports
 chmod 644 /etc/mosh_ports
+cat <<'EOF' > /etc/profile.d/persist-dev-welcome.sh
+if [ -n "$PS1" ] && [ -z "${TMUX:-}" ]; then
+  echo "======================================================================"
+  echo "  Welcome to persist-dev"
+  echo "  Resumable Multi-Project Dev Box"
+  echo "======================================================================"
+  echo "Commands:"
+  echo "  dev menu         - Interactive project switcher"
+  echo "  dev new <name>   - Create a new project"
+  echo "  dev ls           - List all projects"
+  echo "  dev link         - View latest browser/OAuth auth link & QR code"
+  echo "  dev doctor       - Check environment health"
+  echo "  dev help         - Display help for all commands"
+  echo "----------------------------------------------------------------------"
+  echo "Tip: Press Ctrl+b then d to detach from a project session anytime."
+  echo "======================================================================"
+  echo
+fi
+EOF
+chmod 644 /etc/profile.d/persist-dev-welcome.sh
 
 if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
   ssh-keygen -A
