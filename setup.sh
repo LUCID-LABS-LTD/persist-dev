@@ -246,7 +246,7 @@ install_cron() {
   fi
   ensure_cron
   local log="$DATA_DIR/../backup-cron.log"
-  local line="0 */6 * * *  BACKUP_TARGET='$target' podman exec '$CONTAINER' dev backup >> '$log' 2>&1"
+  local line="0 */6 * * *  podman exec -e BACKUP_TARGET='$target' '$CONTAINER' dev backup >> '$log' 2>&1"
   ( crontab -l 2>/dev/null | grep -v "persist-dev.*backup"; echo "$line" ) | crontab - || true
   echo -e "${BOLD}${CYAN}== scheduled backup: $line ==${RESET}"
 }
