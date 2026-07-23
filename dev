@@ -357,7 +357,13 @@ cmd_doctor() {
     echo "  ${RED}${BOLD}[FAIL]${RESET} tailscale not detected"
   fi
   echo "--- projects ---"
-  cmd_ls_raw | sed 's/^/  /' || echo "  (none)"
+  local raw_projects
+  raw_projects=$(cmd_ls_raw)
+  if [ -z "$raw_projects" ]; then
+    echo "  (none)"
+  else
+    sed 's/^/  /' <<< "$raw_projects"
+  fi
 }
 
 # Req #1 (from the original voice spec): sync agent context across sessions.
