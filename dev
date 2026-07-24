@@ -650,7 +650,7 @@ main() {
     ctx)            cmd_ctx "$@" ;;
     link|url|oauth) cmd_link "$@" ;;
     backup)         cmd_backup "$@" ;;
-    harness)        sub="${1:-list}"; shift || true
+    harness)        local sub="${1:-list}"; shift || true
                     case "$sub" in
                       list) cmd_harness_list "$@" ;;
                       add)  cmd_harness_add "$@" ;;
